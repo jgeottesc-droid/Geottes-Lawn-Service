@@ -119,28 +119,6 @@ function loadCustomers() {
 function saveCustomers(customers) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
 }
-async function loadCloudCustomers() {
-  try {
-    const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${CLOUD_ROW_ID}&select=data`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`
-        }
-      }
-    );
-
-    if (!response.ok) return null;
-
-    const rows = await response.json();
-    const customers = rows?.[0]?.data?.customers;
-
-    return Array.isArray(customers) ? customers.map(normalizeCustomer) : null;
-  } catch {
-    return null;
-  }
-}
 
 async function saveCloudCustomers(customers) {
   try {
