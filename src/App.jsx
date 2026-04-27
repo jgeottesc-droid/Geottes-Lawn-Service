@@ -119,7 +119,55 @@ function loadCustomers() {
 function saveCustomers(customers) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
 }
+async function loadCloudCustomers() {
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${CLOUD_ROW_ID}&select=data`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      }
+    );
 
+    if (!response.ok) return null;
+
+    const rows = await response.json();
+    const customers = rows?.[0]?.data?.customers;
+
+    return Array.isArray(customers) ? customers.map(normalizeCustomer) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveCloudCustomers(customers) {
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?on_conflict=id`,
+      {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=minimal"
+        },
+        body: JSON.stringify({
+          id: CLOUD_ROW_ID,
+          code: "APP_STATE",
+          data: { customers },
+          updated_at: new Date().toISOString()
+        })
+      }
+    );
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 function Button({ children, onClick, type = "button", variant = "primary", disabled = false }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled} className={`btn btn-${variant}`}>
