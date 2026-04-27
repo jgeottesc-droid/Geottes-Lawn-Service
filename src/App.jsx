@@ -149,17 +149,16 @@ async function loadCloudCustomers() {
 async function saveCloudCustomers(customers) {
   try {
     const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?on_conflict=id`,
+      `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${CLOUD_ROW_ID}`,
       {
-        method: "POST",
+        method: "PATCH",
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
           "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal"
+          Prefer: "return=representation"
         },
         body: JSON.stringify({
-          id: CLOUD_ROW_ID,
           code: "APP_STATE",
           data: { customers },
           updated_at: new Date().toISOString()
@@ -167,8 +166,16 @@ async function saveCloudCustomers(customers) {
       }
     );
 
-    return response.ok;
-  } catch {
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Supabase save failed:", response.status, text);
+      return false;
+    }
+
+    console.log("Supabase save worked");
+    return true;
+  } catch (error) {
+    console.error("Supabase save crashed:", error);
     return false;
   }
 }
