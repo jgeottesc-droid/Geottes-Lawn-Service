@@ -609,10 +609,37 @@ function CustomerPortal({ customer, onBack, onComment, onRequest }) {
         <PaymentPanel customer={customer} />
 
         <Card>
-          <p className="label">Weather</p>
-          <h3>{weather || "No delay posted"}</h3>
-          <p className="muted-text">Weather updates will appear here if your service needs to move.</p>
-        </Card>
+  <h2>{selected.name}</h2>
+  <p>{selected.address}</p>
+  <p>
+    <strong>Code:</strong> {selected.code}
+  </p>
+
+  {hasPrivateAlert && (
+    <div className="admin-alert">
+      <div>
+        <strong>Customer Alert</strong>
+        <p>
+          {selectedComments.length > 0 && `${selectedComments.length} comment${selectedComments.length === 1 ? "" : "s"}`}
+          {selectedComments.length > 0 && selectedRequests.length > 0 && " • "}
+          {selectedRequests.length > 0 && `${selectedRequests.length} request${selectedRequests.length === 1 ? "" : "s"}`}
+        </p>
+      </div>
+
+      <Button
+        variant="secondary"
+        onClick={() =>
+          setDismissedAlerts(current => ({
+            ...current,
+            [alertKey]: true
+          }))
+        }
+      >
+        Dismiss
+      </Button>
+    </div>
+  )}
+</Card>
       </div>
 
       <Collapsible title="Upcoming Visits" defaultOpen>
@@ -673,8 +700,9 @@ function EmptyAdmin({ onAdd }) {
 }
 function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, onAdd }) {
   const [search, setSearch] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [draft, setDraft] = useState({
+const [confirm, setConfirm] = useState("");
+const [dismissedAlerts, setDismissedAlerts] = useState({});
+const [draft, setDraft] = useState({
     date: "March 1, 2026",
     time: TIMES[0],
     service: "Weekly Mow",
@@ -683,6 +711,10 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
   });
 
   const selected = customers.find(customer => customer.id === selectedId) || customers[0];
+  const selectedComments = arr(selected?.comments);
+const selectedRequests = arr(selected?.requests);
+const alertKey = selected ? `${selected.id}-${selectedComments.length}-${selectedRequests.length}` : "";
+const hasPrivateAlert = selected && !dismissedAlerts[alertKey] && (selectedComments.length > 0 || selectedRequests.length > 0);
 
   const filtered = useMemo(() => {
     return customers.filter(customer => {
