@@ -923,17 +923,27 @@ const hasPrivateAlert = selected && !dismissedAlerts[alertKey] && (selectedComme
             ))}
           </Section>
 
-          <Section title="Comments">
-            {selected.comments.length ? (
-              selected.comments.map((comment, index) => (
-                <p className="empty" key={index}>
-                  {comment}
-                </p>
-              ))
-            ) : (
-              <p className="empty">No comments yet.</p>
-            )}
-          </Section>
+       <Section title="Comments">
+  {selected.comments.length ? (
+    selected.comments.map((comment, index) => (
+      <div className="comment-admin-item" key={index}>
+        <p>{comment}</p>
+        <Button
+          variant="danger"
+          onClick={() =>
+            save({
+              comments: selected.comments.filter((_, commentIndex) => commentIndex !== index)
+            })
+          }
+        >
+          Delete Comment
+        </Button>
+      </div>
+    ))
+  ) : (
+    <p className="empty">No comments yet.</p>
+  )}
+</Section>
 
           <Section title="Requests">
             {selected.requests.length ? (
