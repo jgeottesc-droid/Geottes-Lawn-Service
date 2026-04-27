@@ -607,39 +607,7 @@ function CustomerPortal({ customer, onBack, onComment, onRequest }) {
 
       <div className="customer-quick-grid">
         <PaymentPanel customer={customer} />
-
-        <Card>
-  <h2>{selected.name}</h2>
-  <p>{selected.address}</p>
-  <p>
-    <strong>Code:</strong> {selected.code}
-  </p>
-
-  {hasPrivateAlert && (
-    <div className="admin-alert">
-      <div>
-        <strong>Customer Alert</strong>
-        <p>
-          {selectedComments.length > 0 && `${selectedComments.length} comment${selectedComments.length === 1 ? "" : "s"}`}
-          {selectedComments.length > 0 && selectedRequests.length > 0 && " • "}
-          {selectedRequests.length > 0 && `${selectedRequests.length} request${selectedRequests.length === 1 ? "" : "s"}`}
-        </p>
-      </div>
-
-      <Button
-        variant="secondary"
-        onClick={() =>
-          setDismissedAlerts(current => ({
-            ...current,
-            [alertKey]: true
-          }))
-        }
-      >
-        Dismiss
-      </Button>
-    </div>
-  )}
-</Card>
+        
       </div>
 
       <Collapsible title="Upcoming Visits" defaultOpen>
