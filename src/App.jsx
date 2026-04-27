@@ -671,6 +671,7 @@ function EmptyAdmin({ onAdd }) {
     </main>
   );
 }
+
 function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, onAdd }) {
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState("");
