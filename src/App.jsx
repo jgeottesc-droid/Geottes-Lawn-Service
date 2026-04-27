@@ -757,10 +757,38 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
 }
 
 export default function App() {
+  export default function App() {
   const [customers, setCustomers] = useState(() => loadCustomers());
   const [page, setPage] = useState("home");
   const [selectedId, setSelectedId] = useState(null);
   const [portalId, setPortalId] = useState(null);
+  const [cloudReady, setCloudReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    loadCloudCustomers().then(data => {
+      if (!active) return;
+
+      if (Array.isArray(data)) {
+        setCustomers(data);
+      }
+
+      setCloudReady(true);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    saveCustomers(customers);
+
+    if (cloudReady) {
+      saveCloudCustomers(customers);
+    }
+  }, [customers, cloudReady]);
 
   useEffect(() => {
     saveCustomers(customers);
