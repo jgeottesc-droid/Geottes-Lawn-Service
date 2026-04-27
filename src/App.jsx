@@ -3,10 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 const ADMIN_CODE = "GEOTTESADMIN";
 const VENMO = "@Jesse-Geottes";
 const STORAGE_KEY = "geottes-lawn-service-clean";
+
 const SUPABASE_URL = "https://kwvgpkefpttvgsdegfee.supabase.co";
 const SUPABASE_KEY = "sb_publishable__nV9FlNQQOwbvKQbj7a10w_eUqqXVXe";
 const SUPABASE_TABLE = "customers";
 const CLOUD_ROW_ID = 1;
+
 const YEARS = [2026, 2027, 2028, 2029];
 const MONTHS = ["March", "April", "May", "June", "July", "August", "September", "October"];
 const MONTH_INDEX = { March: 2, April: 3, May: 4, June: 5, July: 6, August: 7, September: 8, October: 9 };
@@ -61,6 +63,7 @@ function getNextVisit(customer) {
 
 function dateParts(label) {
   const [monthRaw, dayRaw, yearRaw] = String(label || "March 1, 2026").replace(",", "").split(" ");
+
   return {
     month: MONTH_INDEX[monthRaw] !== undefined ? monthRaw : "March",
     day: Number(dayRaw) || 1,
@@ -96,6 +99,7 @@ function todayText() {
 function paymentState(customer) {
   const due = Number(customer.balance) || 0;
   const status = customer.paymentStatus || (due > 0 ? "Unpaid" : "Paid");
+
   if (status === "Paid" || due <= 0) return "paid";
   if (status === "Pending") return "pending";
   return "unpaid";
@@ -119,16 +123,17 @@ function loadCustomers() {
 function saveCustomers(customers) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
 }
+
 async function loadCloudCustomers() {
   try {
     const response = await fetch(
       `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${CLOUD_ROW_ID}&select=data`,
       {
         headers: {
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-  "Accept-Profile": "public"
-}
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Accept-Profile": "public"
+        }
       }
     );
 
@@ -147,6 +152,7 @@ async function loadCloudCustomers() {
     return null;
   }
 }
+
 async function saveCloudCustomers(customers) {
   try {
     const response = await fetch(
@@ -154,13 +160,13 @@ async function saveCloudCustomers(customers) {
       {
         method: "PATCH",
         headers: {
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-  "Content-Type": "application/json",
-  "Accept-Profile": "public",
-  "Content-Profile": "public",
-  Prefer: "return=representation"
-}
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          "Accept-Profile": "public",
+          "Content-Profile": "public",
+          Prefer: "return=representation"
+        },
         body: JSON.stringify({
           code: "APP_STATE",
           data: { customers },
@@ -182,6 +188,7 @@ async function saveCloudCustomers(customers) {
     return false;
   }
 }
+
 function Button({ children, onClick, type = "button", variant = "primary", disabled = false }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled} className={`btn btn-${variant}`}>
@@ -220,9 +227,11 @@ function Field({ label, value, onChange, options, type = "text", area = false })
 function Pill({ children }) {
   const text = String(children || "");
   let color = "blue";
+
   if (["Paid", "Completed", "Clear"].includes(text)) color = "green";
   if (["Pending", "Needs Review", "Watch Weather"].includes(text)) color = "amber";
   if (["Unpaid", "Rain Delay", "Weather Delay"].includes(text)) color = "red";
+
   return <span className={`pill pill-${color}`}>{children}</span>;
 }
 
@@ -256,7 +265,12 @@ function CalendarPick({ value, onChange }) {
 
       <div className="chips">
         {YEARS.map(item => (
-          <button key={item} type="button" onClick={() => onChange(`${month} ${selectedParts.day}, ${item}`)} className={year === item ? "chip active-dark" : "chip"}>
+          <button
+            key={item}
+            type="button"
+            onClick={() => onChange(`${month} ${selectedParts.day}, ${item}`)}
+            className={year === item ? "chip active-dark" : "chip"}
+          >
             {item}
           </button>
         ))}
@@ -264,7 +278,12 @@ function CalendarPick({ value, onChange }) {
 
       <div className="chips">
         {MONTHS.map(item => (
-          <button key={item} type="button" onClick={() => onChange(`${item} 1, ${year}`)} className={month === item ? "chip active-green" : "chip"}>
+          <button
+            key={item}
+            type="button"
+            onClick={() => onChange(`${item} 1, ${year}`)}
+            className={month === item ? "chip active-green" : "chip"}
+          >
             {item}
           </button>
         ))}
@@ -281,7 +300,13 @@ function CalendarPick({ value, onChange }) {
           const weekday = day ? DAYS[new Date(year, monthIndex, day).getDay()] : "";
 
           return (
-            <button key={index} type="button" disabled={!day} onClick={() => onChange(label)} className={selected ? "day selected" : "day"}>
+            <button
+              key={index}
+              type="button"
+              disabled={!day}
+              onClick={() => onChange(label)}
+              className={selected ? "day selected" : "day"}
+            >
               <strong>{day || ""}</strong>
               {day && <span>{weekday}</span>}
             </button>
@@ -327,7 +352,13 @@ function VisitRow({ visit, editable, onChange, onDelete, canDelete }) {
           <select value={visit.status} onChange={event => onChange({ status: event.target.value })}>
             {STATUSES.map(status => <option key={status}>{status}</option>)}
           </select>
-          <select value={visit.weather} onChange={event => onChange({ weather: event.target.value, status: event.target.value === "Rain Delay" ? "Weather Delay" : visit.status })}>
+          <select
+            value={visit.weather}
+            onChange={event => onChange({
+              weather: event.target.value,
+              status: event.target.value === "Rain Delay" ? "Weather Delay" : visit.status
+            })}
+          >
             {WEATHER.map(weather => <option key={weather}>{weather}</option>)}
           </select>
           <Button variant="secondary" disabled={!canDelete} onClick={onDelete}>Delete</Button>
@@ -632,7 +663,14 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
     const newVisits = getVisits(selected).map(visit => visit.id === id ? { ...visit, ...changes } : visit);
     const completed = changes.status === "Completed" && oldVisit?.status !== "Completed";
     const history = completed ? [{ date: oldVisit.date, service: oldVisit.service, status: "Completed", amount: selected.balance, paid: selected.paid }] : [];
-    setCustomers(current => current.map(customer => customer.id === selected.id ? normalizeCustomer({ ...customer, visits: newVisits, history: [...arr(customer.history), ...history] }) : customer));
+
+    setCustomers(current =>
+      current.map(customer =>
+        customer.id === selected.id
+          ? normalizeCustomer({ ...customer, visits: newVisits, history: [...arr(customer.history), ...history] })
+          : customer
+      )
+    );
   };
 
   const addVisit = () => {
@@ -678,8 +716,13 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
 
           {filtered.map(customer => {
             const state = paymentState(customer);
+
             return (
-              <button key={customer.id} onClick={() => setSelectedId(customer.id)} className={`customer-button ${state} ${selected.id === customer.id ? "active" : ""}`}>
+              <button
+                key={customer.id}
+                onClick={() => setSelectedId(customer.id)}
+                className={`customer-button ${state} ${selected.id === customer.id ? "active" : ""}`}
+              >
                 <strong>{customer.name}</strong>
                 <span>{state === "paid" ? "PAID" : state === "pending" ? "PENDING" : `$${customer.balance} DUE`}</span>
                 <small>{customer.address}</small>
@@ -709,8 +752,26 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
           <Card>
             <h3>Payment</h3>
             <div className="form-grid">
-              <Field label="Amount due" value={String(selected.balance)} type="number" onChange={value => save({ balance: Math.max(0, Number(value) || 0), paymentStatus: Number(value) <= 0 ? "Paid" : "Unpaid", paid: Number(value) <= 0 })} />
-              <Field label="Payment status" value={selected.paymentStatus} onChange={value => save({ paymentStatus: value, paid: value === "Paid", paidDate: value === "Paid" ? todayText() : selected.paidDate })} options={["Unpaid", "Pending", "Paid"]} />
+              <Field
+                label="Amount due"
+                value={String(selected.balance)}
+                type="number"
+                onChange={value => save({
+                  balance: Math.max(0, Number(value) || 0),
+                  paymentStatus: Number(value) <= 0 ? "Paid" : "Unpaid",
+                  paid: Number(value) <= 0
+                })}
+              />
+              <Field
+                label="Payment status"
+                value={selected.paymentStatus}
+                onChange={value => save({
+                  paymentStatus: value,
+                  paid: value === "Paid",
+                  paidDate: value === "Paid" ? todayText() : selected.paidDate
+                })}
+                options={["Unpaid", "Pending", "Paid"]}
+              />
               <Field label="Payment note" value={selected.paymentNote} onChange={value => save({ paymentNote: value })} />
             </div>
             <Button onClick={() => save({ balance: 0, paid: true, paymentStatus: "Paid", paidDate: todayText() })}>Mark Paid</Button>
@@ -803,10 +864,6 @@ export default function App() {
     }
   }, [customers, cloudReady]);
 
-  useEffect(() => {
-    saveCustomers(customers);
-  }, [customers]);
-
   const createCustomer = customer => {
     const item = normalizeCustomer(customer);
     setCustomers(current => [...current, item]);
@@ -815,7 +872,11 @@ export default function App() {
   };
 
   const updateCustomer = (id, changes) => {
-    setCustomers(current => current.map(customer => customer.id === id ? normalizeCustomer({ ...customer, ...changes }) : customer));
+    setCustomers(current =>
+      current.map(customer =>
+        customer.id === id ? normalizeCustomer({ ...customer, ...changes }) : customer
+      )
+    );
   };
 
   const addComment = (id, comment) => {
