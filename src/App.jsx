@@ -671,7 +671,6 @@ function EmptyAdmin({ onAdd }) {
     </main>
   );
 }
-
 function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, onAdd }) {
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -692,26 +691,17 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
     });
   }, [customers, search]);
 
-  const route = useMemo(() => {
-    return customers
-      .flatMap(customer => getVisits(customer).map(visit => ({ customer, visit })))
-      .filter(item => item.visit.status !== "Completed")
-      .sort((a, b) => dateObject(a.visit.date) - dateObject(b.visit.date));
-  }, [customers]);
-
   if (!customers.length || !selected) return <EmptyAdmin onAdd={onAdd} />;
 
-  const today = new Date();
-  const todayJobs = route.filter(item => dateObject(item.visit.date).toDateString() === today.toDateString());
-  const upcomingJobs = route.slice(0, 8);
-  const weatherDelays = route.filter(item => item.visit.status === "Weather Delay" || item.visit.weather !== "Clear");
   const unpaid = customers.filter(customer => Number(customer.balance) > 0 && customer.paymentStatus !== "Paid");
-  const completedCount = customers.reduce((sum, customer) => sum + arr(customer.history).length, 0);
   const totalDue = customers.reduce((sum, customer) => sum + Number(customer.balance || 0), 0);
-  const selectedNext = getNextVisit(selected);
 
   const save = changes => {
-    setCustomers(current => current.map(customer => customer.id === selected.id ? normalizeCustomer({ ...customer, ...changes }) : customer));
+    setCustomers(current =>
+      current.map(customer =>
+        customer.id === selected.id ? normalizeCustomer({ ...customer, ...changes }) : customer
+      )
+    );
   };
 
   const saveVisits = visits => {
@@ -720,294 +710,55 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
 
   const updateVisit = (id, changes) => {
     const oldVisit = getVisits(selected).find(visit => visit.id === id);
-    const newVisits = getVisits(selected).map(visit => visit.id === id ? { ...visit, ...changes } : visit);
+    const newVisits = getVisits(selected).map(visit =>
+      visit.id === id ? { ...visit, ...changes } : visit
+    );
     const completed = changes.status === "Completed" && oldVisit?.status !== "Completed";
-
     const history = completed
-      ? [{
-          date: oldVisit.date,
-          service: oldVisit.service,
-          status: "Completed",
-          amount: selected.balance,
-          paid: selected.paid,
-          completedAt: todayText()
-        }]
+      ? [
+          {
+            date: oldVisit.date,
+            service: oldVisit.service,
+            status: "Completed",
+            amount: selected.balance,
+            paid: selected.paid
+          }
+        ]
       : [];
 
     setCustomers(current =>
       current.map(customer =>
         customer.id === selected.id
-          ? normalizeCustomer({ ...customer, visits: newVisits, history: [...arr(customer.history), ...history] })
+          ? normalizeCustomer({
+              ...customer,
+              visits: newVisits,
+              history: [...arr(customer.history), ...history]
+            })
           : customer
       )
     );
   };
 
   const addVisit = () => {
-    const id = getVisits(selected).length ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1 : 1;
-    saveVisits([...getVisits(selected), makeVisit(id, draft.date, draft.time, draft.service, draft.status, draft.weather)]);
+    const id = getVisits(selected).length
+      ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1
+      : 1;
+
+    saveVisits([
+      ...getVisits(selected),
+      makeVisit(id, draft.date, draft.time, draft.service, draft.status, draft.weather)
+    ]);
   };
 
   const addRecurring = () => {
-    const id = getVisits(selected).length ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1 : 1;
-    const added = Array.from({ length: 4 }, (_, index) => makeVisit(id + index, addWeeks(draft.date, index), draft.time, draft.service));
-    saveVisits([...getVisits(selected), ...added]);
-  };
+    const id = getVisits(selected).length
+      ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1
+      : 1;
 
-  const quickUpdateNextVisit = changes => {
-    if (!selectedNext) return;
-    updateVisit(selectedNext.id, changes);
-  };
+    const added = Array.from({ length: 4 }, (_, index) =>
+      makeVisit(id + index, addWeeks(draft.date, index), draft.time, draft.service)
+    );
 
-  const moveNextVisitTomorrow = () => {
-    if (!selectedNext) return;
-
-    const date = dateObject(selectedNext.date);
-    date.setDate(date.getDate() + 1);
-
-    updateVisit(selectedNext.id, {
-      date: formatDate(date),
-      status: "Weather Delay",
-      weather: "Move to Tomorrow"
-    });
-  };
-
-  const deleteCustomer = () => {
-    if (confirm !== "DELETE") return;
-    const remaining = customers.filter(customer => customer.id !== selected.id);
-    setCustomers(remaining);
-    setSelectedId(remaining[0]?.id || null);
-    setConfirm("");
-  };
-
-  return (
-    <main className="page">
-      <div className="top-row">
-        <div>
-          <p className="eyebrow">Admin View</p>
-          <h2>Manage customers</h2>
-          <span>Schedules, payments, comments, requests, weather, and route view.</span>
-        </div>
-        <Button onClick={onAdd}>+ Add Customer</Button>
-      </div>
-
-      <div className="stats upgraded-stats">
-        <Card className="stat-card">
-          <p>Today’s Jobs</p>
-          <h2>{todayJobs.length}</h2>
-        </Card>
-        <Card className="stat-card">
-          <p>Upcoming Jobs</p>
-          <h2>{route.length}</h2>
-        </Card>
-        <Card className={weatherDelays.length ? "stat-red stat-card" : "stat-green stat-card"}>
-          <p>Weather Delays</p>
-          <h2>{weatherDelays.length}</h2>
-        </Card>
-        <Card className={unpaid.length ? "stat-red stat-card" : "stat-green stat-card"}>
-          <p>Unpaid</p>
-          <h2>{unpaid.length}</h2>
-        </Card>
-        <Card className="stat-card">
-          <p>Total Due</p>
-          <h2>${totalDue}</h2>
-        </Card>
-        <Card className="stat-card">
-          <p>Completed</p>
-          <h2>{completedCount}</h2>
-        </Card>
-      </div>
-
-      <Card>
-        <div className="section-title-row">
-          <div>
-            <h3>Route View</h3>
-            <p className="muted-text">Use this from your phone while working through jobs.</p>
-          </div>
-        </div>
-
-        <div className="route-list">
-          {upcomingJobs.length ? upcomingJobs.map((item, index) => (
-            <button
-              key={`${item.customer.id}-${item.visit.id}`}
-              className="route-item"
-              type="button"
-              onClick={() => setSelectedId(item.customer.id)}
-            >
-              <span className="route-number">{index + 1}</span>
-              <div>
-                <strong>{item.customer.name}</strong>
-                <small>{visitText(item.visit)}</small>
-                <small>{item.customer.address}</small>
-              </div>
-              <Pill>{item.visit.status}</Pill>
-            </button>
-          )) : <p className="empty">No route items yet.</p>}
-        </div>
-      </Card>
-
-      <div className="admin-layout">
-        <Card className="customer-list">
-          <h3>Customer Folders</h3>
-          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search customers..." />
-
-          {filtered.map(customer => {
-            const state = paymentState(customer);
-            const next = getNextVisit(customer);
-
-            return (
-              <button
-                key={customer.id}
-                onClick={() => setSelectedId(customer.id)}
-                className={`customer-button better-card ${state} ${selected.id === customer.id ? "active" : ""}`}
-              >
-                <div className="customer-card-top">
-                  <strong>{customer.name}</strong>
-                  <span>{state === "paid" ? "PAID" : state === "pending" ? "PENDING" : `$${customer.balance} DUE`}</span>
-                </div>
-                <small>{customer.address}</small>
-                <small><strong>Next:</strong> {next ? visitText(next) : "No visit scheduled"}</small>
-                <small><strong>Status:</strong> {next?.status || "Scheduled"}</small>
-                <small><strong>Code:</strong> {customer.code}</small>
-              </button>
-            );
-          })}
-        </Card>
-
-        <div className="stack">
-          <Card>
-            <h2>{selected.name}</h2>
-            <p>{selected.address}</p>
-            <p><strong>Code:</strong> {selected.code}</p>
-            <p><strong>Next:</strong> {selectedNext ? visitText(selectedNext) : "No visit scheduled"}</p>
-          </Card>
-
-          <Card>
-            <h3>Quick Actions</h3>
-            <div className="quick-actions">
-              <Button variant="secondary" disabled={!selectedNext} onClick={() => quickUpdateNextVisit({ status: "Starting Soon" })}>Starting Soon</Button>
-              <Button variant="secondary" disabled={!selectedNext} onClick={() => quickUpdateNextVisit({ status: "In Progress" })}>In Progress</Button>
-              <Button variant="secondary" disabled={!selectedNext} onClick={() => quickUpdateNextVisit({ status: "Completed", weather: "Clear" })}>Completed</Button>
-              <Button variant="secondary" disabled={!selectedNext} onClick={() => quickUpdateNextVisit({ status: "Weather Delay", weather: "Rain Delay" })}>Weather Delay</Button>
-              <Button variant="secondary" disabled={!selectedNext} onClick={moveNextVisitTomorrow}>Move Tomorrow</Button>
-              <Button onClick={() => save({ balance: 0, paid: true, paymentStatus: "Paid", paidDate: todayText() })}>Mark Paid</Button>
-            </div>
-          </Card>
-
-          <Collapsible title="Customer Info" defaultOpen>
-            <div className="form-grid">
-              <Field label="Name" value={selected.name} onChange={value => save({ name: value })} />
-              <Field label="Code" value={selected.code} onChange={value => save({ code: value.toUpperCase() })} />
-              <Field label="Address" value={selected.address} onChange={value => save({ address: value })} />
-              <Field label="Private notes" value={selected.notes} onChange={value => save({ notes: value })} area />
-            </div>
-          </Collapsible>
-
-          <Collapsible title="Payment" defaultOpen>
-            <div className="form-grid">
-              <Field
-                label="Amount due"
-                value={String(selected.balance)}
-                type="number"
-                onChange={value => save({
-                  balance: Math.max(0, Number(value) || 0),
-                  paymentStatus: Number(value) <= 0 ? "Paid" : "Unpaid",
-                  paid: Number(value) <= 0
-                })}
-              />
-              <Field
-                label="Payment status"
-                value={selected.paymentStatus}
-                onChange={value => save({
-                  paymentStatus: value,
-                  paid: value === "Paid",
-                  paidDate: value === "Paid" ? todayText() : selected.paidDate
-                })}
-                options={["Unpaid", "Pending", "Paid"]}
-              />
-              <Field label="Payment note" value={selected.paymentNote} onChange={value => save({ paymentNote: value })} />
-            </div>
-
-            <PaymentPanel customer={selected} />
-          </Collapsible>
-
-          <Collapsible title="Weather Notice">
-            <Field label="Message customers see" value={selected.weatherNotice} onChange={value => save({ weatherNotice: value })} area />
-          </Collapsible>
-
-          <Collapsible title="Add Visits">
-            <div className="form-grid">
-              <Field label="Service" value={draft.service} onChange={value => setDraft(current => ({ ...current, service: value }))} />
-              <Field label="Time" value={draft.time} onChange={value => setDraft(current => ({ ...current, time: value }))} options={TIMES} />
-              <CalendarPick value={draft.date} onChange={value => setDraft(current => ({ ...current, date: value }))} />
-              <Field label="Status" value={draft.status} onChange={value => setDraft(current => ({ ...current, status: value }))} options={STATUSES} />
-              <Field label="Weather" value={draft.weather} onChange={value => setDraft(current => ({ ...current, weather: value }))} options={WEATHER} />
-            </div>
-            <div className="button-row">
-              <Button onClick={addVisit}>Add One-Time Visit</Button>
-              <Button variant="secondary" onClick={addRecurring}>Create 4 Weekly Visits</Button>
-            </div>
-          </Collapsible>
-
-          <Collapsible title="Upcoming Visits" defaultOpen>
-            <div className="stack">
-              {getVisits(selected).map(visit => (
-                <VisitRow
-                  key={visit.id}
-                  visit={visit}
-                  editable
-                  canDelete={getVisits(selected).length > 1}
-                  onChange={changes => updateVisit(visit.id, changes)}
-                  onDelete={() => saveVisits(getVisits(selected).filter(item => item.id !== visit.id))}
-                />
-              ))}
-            </div>
-          </Collapsible>
-
-          <Collapsible title="Service History">
-            <div className="stack">
-              {selected.history.length ? selected.history.map((item, index) => (
-                <p key={index} className="empty">
-                  <strong>{item.date}</strong>
-                  <br />
-                  {item.service} — {item.status}
-                </p>
-              )) : <p className="empty">No completed services yet.</p>}
-            </div>
-          </Collapsible>
-
-          <Collapsible title="Comments">
-            <div className="stack">
-              {selected.comments.length ? selected.comments.map((comment, index) => <p className="empty" key={index}>{comment}</p>) : <p className="empty">No comments yet.</p>}
-            </div>
-          </Collapsible>
-
-          <Collapsible title="Requests">
-            <div className="stack">
-              {selected.requests.length ? selected.requests.map((request, index) => <p className="empty" key={index}><strong>{request.type}</strong>{request.note ? ` — ${request.note}` : ""}</p>) : <p className="empty">No requests yet.</p>}
-            </div>
-          </Collapsible>
-
-          <Collapsible title="Danger Zone">
-            <div className="danger-inner">
-              <p>Type DELETE before deleting this customer.</p>
-              <input value={confirm} onChange={event => setConfirm(event.target.value)} placeholder="Type DELETE" />
-              <Button variant="danger" disabled={confirm !== "DELETE"} onClick={deleteCustomer}>Delete Customer</Button>
-            </div>
-          </Collapsible>
-        </div>
-      </div>
-    </main>
-  );
-}
-  const addVisit = () => {
-    const id = getVisits(selected).length ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1 : 1;
-    saveVisits([...getVisits(selected), makeVisit(id, draft.date, draft.time, draft.service, draft.status, draft.weather)]);
-  };
-
-  const addRecurring = () => {
-    const id = getVisits(selected).length ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1 : 1;
-    const added = Array.from({ length: 4 }, (_, index) => makeVisit(id + index, addWeeks(draft.date, index), draft.time, draft.service));
     saveVisits([...getVisits(selected), ...added]);
   };
 
@@ -1031,15 +782,28 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
       </div>
 
       <div className="stats">
-        <Card><p>Active Clients</p><h2>{customers.length}</h2></Card>
-        <Card><p>Total Due</p><h2>${totalDue}</h2></Card>
-        <Card className={unpaid.length ? "stat-red" : "stat-green"}><p>Unpaid Accounts</p><h2>{unpaid.length}</h2></Card>
+        <Card>
+          <p>Active Clients</p>
+          <h2>{customers.length}</h2>
+        </Card>
+        <Card>
+          <p>Total Due</p>
+          <h2>${totalDue}</h2>
+        </Card>
+        <Card className={unpaid.length ? "stat-red" : "stat-green"}>
+          <p>Unpaid Accounts</p>
+          <h2>{unpaid.length}</h2>
+        </Card>
       </div>
 
       <div className="admin-layout">
         <Card className="customer-list">
           <h3>Customer Folders</h3>
-          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search customers..." />
+          <input
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Search customers..."
+          />
 
           {filtered.map(customer => {
             const state = paymentState(customer);
@@ -1051,7 +815,13 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
                 className={`customer-button ${state} ${selected.id === customer.id ? "active" : ""}`}
               >
                 <strong>{customer.name}</strong>
-                <span>{state === "paid" ? "PAID" : state === "pending" ? "PENDING" : `$${customer.balance} DUE`}</span>
+                <span>
+                  {state === "paid"
+                    ? "PAID"
+                    : state === "pending"
+                      ? "PENDING"
+                      : `$${customer.balance} DUE`}
+                </span>
                 <small>{customer.address}</small>
                 <small>Code: {customer.code}</small>
               </button>
@@ -1063,7 +833,9 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
           <Card>
             <h2>{selected.name}</h2>
             <p>{selected.address}</p>
-            <p><strong>Code:</strong> {selected.code}</p>
+            <p>
+              <strong>Code:</strong> {selected.code}
+            </p>
           </Card>
 
           <Card>
@@ -1083,31 +855,42 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
                 label="Amount due"
                 value={String(selected.balance)}
                 type="number"
-                onChange={value => save({
-                  balance: Math.max(0, Number(value) || 0),
-                  paymentStatus: Number(value) <= 0 ? "Paid" : "Unpaid",
-                  paid: Number(value) <= 0
-                })}
+                onChange={value =>
+                  save({
+                    balance: Math.max(0, Number(value) || 0),
+                    paymentStatus: Number(value) <= 0 ? "Paid" : "Unpaid",
+                    paid: Number(value) <= 0
+                  })
+                }
               />
               <Field
                 label="Payment status"
                 value={selected.paymentStatus}
-                onChange={value => save({
-                  paymentStatus: value,
-                  paid: value === "Paid",
-                  paidDate: value === "Paid" ? todayText() : selected.paidDate
-                })}
+                onChange={value =>
+                  save({
+                    paymentStatus: value,
+                    paid: value === "Paid",
+                    paidDate: value === "Paid" ? todayText() : selected.paidDate
+                  })
+                }
                 options={["Unpaid", "Pending", "Paid"]}
               />
               <Field label="Payment note" value={selected.paymentNote} onChange={value => save({ paymentNote: value })} />
             </div>
-            <Button onClick={() => save({ balance: 0, paid: true, paymentStatus: "Paid", paidDate: todayText() })}>Mark Paid</Button>
+            <Button onClick={() => save({ balance: 0, paid: true, paymentStatus: "Paid", paidDate: todayText() })}>
+              Mark Paid
+            </Button>
             <PaymentPanel customer={selected} />
           </Card>
 
           <Card>
             <h3>Weather Notice</h3>
-            <Field label="Message customers see" value={selected.weatherNotice} onChange={value => save({ weatherNotice: value })} area />
+            <Field
+              label="Message customers see"
+              value={selected.weatherNotice}
+              onChange={value => save({ weatherNotice: value })}
+              area
+            />
           </Card>
 
           <Card>
@@ -1121,7 +904,9 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
             </div>
             <div className="button-row">
               <Button onClick={addVisit}>Add One-Time Visit</Button>
-              <Button variant="secondary" onClick={addRecurring}>Create 4 Weekly Visits</Button>
+              <Button variant="secondary" onClick={addRecurring}>
+                Create 4 Weekly Visits
+              </Button>
             </div>
           </Card>
 
@@ -1139,18 +924,41 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
           </Section>
 
           <Section title="Comments">
-            {selected.comments.length ? selected.comments.map((comment, index) => <p className="empty" key={index}>{comment}</p>) : <p className="empty">No comments yet.</p>}
+            {selected.comments.length ? (
+              selected.comments.map((comment, index) => (
+                <p className="empty" key={index}>
+                  {comment}
+                </p>
+              ))
+            ) : (
+              <p className="empty">No comments yet.</p>
+            )}
           </Section>
 
           <Section title="Requests">
-            {selected.requests.length ? selected.requests.map((request, index) => <p className="empty" key={index}><strong>{request.type}</strong>{request.note ? ` — ${request.note}` : ""}</p>) : <p className="empty">No requests yet.</p>}
+            {selected.requests.length ? (
+              selected.requests.map((request, index) => (
+                <p className="empty" key={index}>
+                  <strong>{request.type}</strong>
+                  {request.note ? ` — ${request.note}` : ""}
+                </p>
+              ))
+            ) : (
+              <p className="empty">No requests yet.</p>
+            )}
           </Section>
 
           <Card className="danger">
             <h3>Danger Zone</h3>
             <p>Type DELETE before deleting this customer.</p>
-            <input value={confirm} onChange={event => setConfirm(event.target.value)} placeholder="Type DELETE" />
-            <Button variant="danger" disabled={confirm !== "DELETE"} onClick={deleteCustomer}>Delete Customer</Button>
+            <input
+              value={confirm}
+              onChange={event => setConfirm(event.target.value)}
+              placeholder="Type DELETE"
+            />
+            <Button variant="danger" disabled={confirm !== "DELETE"} onClick={deleteCustomer}>
+              Delete Customer
+            </Button>
           </Card>
         </div>
       </div>
