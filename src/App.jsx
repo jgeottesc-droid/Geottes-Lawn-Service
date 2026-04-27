@@ -757,7 +757,6 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
 }
 
 export default function App() {
-  export default function App() {
   const [customers, setCustomers] = useState(() => loadCustomers());
   const [page, setPage] = useState("home");
   const [selectedId, setSelectedId] = useState(null);
