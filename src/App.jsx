@@ -125,9 +125,10 @@ async function loadCloudCustomers() {
       `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${CLOUD_ROW_ID}&select=data`,
       {
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`
-        }
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  "Accept-Profile": "public"
+}
       }
     );
 
@@ -153,11 +154,13 @@ async function saveCloudCustomers(customers) {
       {
         method: "PATCH",
         headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation"
-        },
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json",
+  "Accept-Profile": "public",
+  "Content-Profile": "public",
+  Prefer: "return=representation"
+}
         body: JSON.stringify({
           code: "APP_STATE",
           data: { customers },
