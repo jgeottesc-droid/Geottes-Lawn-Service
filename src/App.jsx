@@ -846,22 +846,29 @@ function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, on
     </main>
   );
 }
-
 export default function App() {
   const [customers, setCustomers] = useState(() => loadCustomers());
   const [page, setPage] = useState("home");
   const [selectedId, setSelectedId] = useState(null);
   const [portalId, setPortalId] = useState(null);
   const [cloudReady, setCloudReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("Loading cloud");
+  const [lastSynced, setLastSynced] = useState("");
 
   useEffect(() => {
     let active = true;
+
+    setSyncStatus("Loading cloud");
 
     loadCloudCustomers().then(data => {
       if (!active) return;
 
       if (Array.isArray(data)) {
         setCustomers(data);
+        setSyncStatus("Synced");
+        setLastSynced(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      } else {
+        setSyncStatus("Cloud ready");
       }
 
       setCloudReady(true);
@@ -876,7 +883,16 @@ export default function App() {
     saveCustomers(customers);
 
     if (cloudReady) {
-      saveCloudCustomers(customers);
+      setSyncStatus("Saving...");
+
+      saveCloudCustomers(customers).then(ok => {
+        if (ok) {
+          setSyncStatus("Synced");
+          setLastSynced(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+        } else {
+          setSyncStatus("Sync error");
+        }
+      });
     }
   }, [customers, cloudReady]);
 
@@ -914,7 +930,11 @@ export default function App() {
 
   return (
     <div>
-      <Header onSignOut={signOut} />
+      <Header
+        onSignOut={signOut}
+        syncStatus={syncStatus}
+        lastSynced={lastSynced}
+      />
 
       {page === "home" && (
         <Login
