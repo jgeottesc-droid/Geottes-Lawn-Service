@@ -428,7 +428,7 @@ function Login({ customers, onAdmin, onCustomer }) {
             <Button type="submit">Open Portal</Button>
           </form>
 
-          <p className="hint">Admin code: <strong>{ADMIN_CODE}</strong></p>
+          <p className="hint">Enter your customer or admin portal code.</p>
         </Card>
       </div>
     </main>
