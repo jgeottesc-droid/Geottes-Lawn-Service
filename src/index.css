@@ -924,3 +924,35 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+.admin-alert {
+  margin-top: 16px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  border-radius: 18px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-alert strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.admin-alert p {
+  margin: 4px 0 0;
+  color: #991b1b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+@media (max-width: 520px) {
+  .admin-alert {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
