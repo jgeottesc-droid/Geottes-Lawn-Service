@@ -776,3 +776,151 @@ textarea:focus {
     flex: 1;
   }
 }
+.muted-text {
+  color: #64748b;
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+.upgraded-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stat-card h2 {
+  margin: 4px 0 0;
+  font-size: 30px;
+}
+
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.section-title-row h3 {
+  margin: 0;
+}
+
+.route-list {
+  display: grid;
+  gap: 10px;
+}
+
+.route-item {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 18px;
+  padding: 12px;
+  text-align: left;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.route-number {
+  width: 34px;
+  height: 34px;
+  border-radius: 14px;
+  background: #047857;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-weight: 950;
+}
+
+.route-item small {
+  display: block;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.customer-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.better-card {
+  gap: 8px;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.collapse-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.collapse-header {
+  width: 100%;
+  border: 0;
+  background: white;
+  color: #0f172a;
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 950;
+  font-size: 18px;
+  text-align: left;
+}
+
+.collapse-header strong {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 22px;
+}
+
+.collapse-body {
+  border-top: 1px solid #e2e8f0;
+  padding: 16px 18px;
+}
+
+.danger-inner {
+  display: grid;
+  gap: 12px;
+}
+
+.danger-inner p {
+  color: #991b1b;
+  margin: 0;
+}
+
+@media (min-width: 700px) {
+  .upgraded-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .quick-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .route-item {
+    grid-template-columns: auto 1fr;
+  }
+
+  .route-item .pill {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .quick-actions {
+    grid-template-columns: 1fr;
+  }
+}
