@@ -234,8 +234,16 @@ function Pill({ children }) {
 
   return <span className={`pill pill-${color}`}>{children}</span>;
 }
+function Header({ onSignOut, syncStatus, lastSynced }) {
+  const statusClass =
+    syncStatus === "Synced"
+      ? "sync-good"
+      : syncStatus === "Saving..."
+        ? "sync-saving"
+        : syncStatus === "Sync error"
+          ? "sync-error"
+          : "sync-neutral";
 
-function Header({ onSignOut }) {
   return (
     <header className="header">
       <div className="brand">
@@ -245,7 +253,15 @@ function Header({ onSignOut }) {
           <p>Private customer portal</p>
         </div>
       </div>
-      <Button variant="secondary" onClick={onSignOut}>Sign Out</Button>
+
+      <div className="header-actions">
+        <div className={`sync-badge ${statusClass}`}>
+          <span>{syncStatus || "Cloud sync"}</span>
+          {lastSynced && <small>{lastSynced}</small>}
+        </div>
+
+        <Button variant="secondary" onClick={onSignOut}>Sign Out</Button>
+      </div>
     </header>
   );
 }
