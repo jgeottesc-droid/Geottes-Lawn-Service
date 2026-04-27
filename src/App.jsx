@@ -711,7 +711,7 @@ const [draft, setDraft] = useState({
   });
 
   const selected = customers.find(customer => customer.id === selectedId) || customers[0];
-  const selectedComments = arr(selected?.comments);
+    const selectedComments = arr(selected?.comments);
 const selectedRequests = arr(selected?.requests);
 const alertKey = selected ? `${selected.id}-${selectedComments.length}-${selectedRequests.length}` : "";
 const hasPrivateAlert = selected && !dismissedAlerts[alertKey] && (selectedComments.length > 0 || selectedRequests.length > 0);
