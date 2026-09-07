@@ -1258,6 +1258,214 @@ function DeleteForm({ customer, item, onDelete, onClose }) {
   );
 }
 
+function ScheduleCalendar({ rows, writable, onMove, onEdit }) {
+  const [anchor, setAnchor] = useState(() => new Date());
+  const [mode, setMode] = useState("Week");
+  const [moving, setMoving] = useState(null);
+  const [error, setError] = useState("");
+  const start = new Date(
+    anchor.getFullYear(),
+    anchor.getMonth(),
+    mode === "Month" ? 1 : anchor.getDate(),
+  );
+  start.setDate(start.getDate() - start.getDay());
+  const days = Array.from({ length: mode === "Month" ? 42 : 7 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(day.getDate() + index);
+    return day;
+  });
+  const slots = [
+    ...new Set([...TIMES, ...rows.map(({ visit }) => visit.time)]),
+  ].filter(Boolean);
+  const selected = rows.find(
+    ({ customer, visit }) => `${customer.id}:${visit.id}` === moving,
+  );
+  function navigate(direction) {
+    const next = new Date(anchor);
+    if (mode === "Month") {
+      next.setDate(1);
+      next.setMonth(next.getMonth() + direction);
+    } else next.setDate(next.getDate() + direction * 7);
+    setAnchor(next);
+  }
+  function moveTo(date, time, key = moving) {
+    if (!writable || !key) return;
+    const row = rows.find(
+      ({ customer, visit }) => `${customer.id}:${visit.id}` === key,
+    );
+    if (!row) return;
+    try {
+      onMove(row.customer, row.visit, {
+        date: formatDate(date),
+        time: time || row.visit.time,
+      });
+      setMoving(null);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+  function cutCard({ customer, visit }) {
+    const key = `${customer.id}:${visit.id}`;
+    return (
+      <div
+        key={key}
+        className={`calendar-cut ${moving === key ? "is-moving" : ""}`}
+      >
+        <button
+          type="button"
+          draggable={writable}
+          disabled={!writable}
+          aria-pressed={moving === key}
+          aria-label={`Move ${customer.name}, ${visit.date}, ${visit.time}`}
+          onClick={() => setMoving(moving === key ? null : key)}
+          onDragStart={(event) => {
+            event.dataTransfer.setData("text/plain", key);
+            event.dataTransfer.effectAllowed = "move";
+            setMoving(key);
+          }}
+        >
+          <strong>{customer.name}</strong>
+          <span>{visit.time}</span>
+          <small>{customer.address}</small>
+        </button>
+        <button
+          type="button"
+          className="calendar-edit"
+          disabled={!writable}
+          onClick={() => onEdit(customer, visit)}
+          aria-label={`Edit cut for ${customer.name}`}
+        >
+          Edit
+        </button>
+      </div>
+    );
+  }
+  function cell(day, time) {
+    const date = formatDate(day);
+    const cuts = rows.filter(
+      ({ visit }) => visit.date === date && (!time || visit.time === time),
+    );
+    return (
+      <div
+        key={`${date}-${time || "day"}`}
+        className={`calendar-cell ${formatDate(new Date()) === date ? "is-today" : ""} ${moving ? "can-drop" : ""}`}
+        onDragOver={(event) => {
+          if (writable && moving) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          moveTo(day, time, event.dataTransfer.getData("text/plain"));
+        }}
+      >
+        {mode === "Month" && (
+          <span
+            className={`calendar-date ${day.getMonth() !== anchor.getMonth() ? "muted" : ""}`}
+          >
+            {day.getDate()}
+          </span>
+        )}
+        {cuts.map(cutCard)}
+        <button
+          type="button"
+          className="calendar-destination"
+          disabled={!writable || !moving}
+          aria-label={`Move selected cut to ${date}${time ? `, ${time}` : ""}`}
+          onClick={() => moveTo(day, time)}
+        >
+          {moving ? "Move here" : "—"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <section className="panel calendar-panel" aria-label="Cut calendar">
+      <div className="calendar-toolbar">
+        <div>
+          <span className="eyebrow">YOUR CUT CALENDAR</span>
+          <h2>
+            {mode === "Month"
+              ? anchor.toLocaleDateString("en-US", {
+                  month: "long",
+                  year: "numeric",
+                })
+              : `${days[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+          </h2>
+        </div>
+        <div className="calendar-controls">
+          <Button
+            variant="secondary"
+            onClick={() => navigate(-1)}
+            aria-label="Previous calendar period"
+          >
+            ←
+          </Button>
+          <Button variant="secondary" onClick={() => setAnchor(new Date())}>
+            Today
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => navigate(1)}
+            aria-label="Next calendar period"
+          >
+            →
+          </Button>
+          <div className="segmented">
+            {["Week", "Month"].map((item) => (
+              <button
+                key={item}
+                aria-pressed={mode === item}
+                onClick={() => setMode(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="calendar-help" role="status">
+        {selected ? (
+          <>
+            <strong>Moving {selected.customer.name}</strong> · Choose a day or
+            time slot.{" "}
+            <button className="text-button" onClick={() => setMoving(null)}>
+              Cancel move
+            </button>
+          </>
+        ) : (
+          "Drag a cut to another slot, or tap a cut and then tap Move here. Use Edit for any date or time."
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      <div className="calendar-scroll">
+        <div className={`calendar-grid calendar-${mode.toLowerCase()}`}>
+          {mode === "Week" && (
+            <div className="calendar-day-heading">Arrival window</div>
+          )}
+          {days.slice(0, 7).map((day) => (
+            <div key={day.toISOString()} className="calendar-day-heading">
+              {day.toLocaleDateString("en-US", { weekday: "short" })}
+              {mode === "Week" && <strong>{day.getDate()}</strong>}
+            </div>
+          ))}
+          {mode === "Month"
+            ? days.map((day) => cell(day))
+            : slots.map((time) => (
+                <div className="calendar-time-row" key={time}>
+                  <div className="calendar-time-label">{time}</div>
+                  {days.map((day) => cell(day, time))}
+                </div>
+              ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Owner({ customers, update, create, remove, writable }) {
   const [view, setView] = useState("Overview");
   const [selectedId, setSelectedId] = useState(null);
@@ -1620,6 +1828,19 @@ function Owner({ customers, update, create, remove, writable }) {
         )}
         {view === "Schedule" && (
           <div className="schedule-center">
+            <ScheduleCalendar
+              rows={scheduled}
+              writable={writable}
+              onEdit={(customer, visit) => open("visit", customer, { visit })}
+              onMove={(customer, visit, changes) => {
+                update(customer.id, (current) =>
+                  changeVisit(current, visit.id, changes),
+                );
+                setNotice(
+                  `Cut moved for ${firstName(customer.name)} to ${changes.date}, ${changes.time}. Check the save status above.`,
+                );
+              }}
+            />
             <div className="schedule-stats">
               <button onClick={() => setScheduleFilter("Next 7 days")}>
                 <span>Next 7 days</span>
