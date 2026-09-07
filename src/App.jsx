@@ -954,6 +954,157 @@ function VisitForm({ customer, visit, onSave, onClose }) {
     </Modal>
   );
 }
+
+function QuickScheduleForm({ customers, initialCustomer, onSave, onClose }) {
+  const firstChoice =
+    initialCustomer ||
+    customers.find((customer) => !getNextVisit(customer)) ||
+    customers[0];
+  const [customerId, setCustomerId] = useState(firstChoice?.id || "");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState(TIMES[0]);
+  const [service, setService] = useState(firstChoice?.service || "Weekly Mow");
+  const [repeat, setRepeat] = useState(false);
+  const [error, setError] = useState("");
+  const customer = customers.find(
+    (item) => String(item.id) === String(customerId),
+  );
+
+  useEffect(() => {
+    if (!customer) return;
+    const latest = [...getVisits(customer)].sort(
+      (a, b) => dateObject(b.date) - dateObject(a.date),
+    )[0];
+    setDate(isoDate(addWeeks(latest?.date || formatDate(new Date()), 1)));
+    setTime(latest?.time || TIMES[0]);
+    setService(latest?.service || customer.service);
+    setError("");
+  }, [customerId]);
+
+  function chooseOffset(weeks) {
+    const latest = [...getVisits(customer)].sort(
+      (a, b) => dateObject(b.date) - dateObject(a.date),
+    )[0];
+    setDate(isoDate(addWeeks(latest?.date || formatDate(new Date()), weeks)));
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    if (!customer || !date) return;
+    try {
+      onSave(
+        customer,
+        appendVisits(
+          customer,
+          { date: fromISO(date), time, service },
+          repeat ? 4 : 1,
+        ),
+        fromISO(date),
+      );
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <Modal
+      title="Schedule a cut"
+      subtitle="The usual service and time are already filled in."
+      onClose={onClose}
+    >
+      <form className="form-stack quick-schedule-form" onSubmit={submit}>
+        <label className="field">
+          <span>Customer</span>
+          <select
+            value={customerId}
+            onChange={(event) => setCustomerId(event.target.value)}
+          >
+            {customers.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {customer && (
+          <div className="schedule-customer-summary">
+            <span className="avatar">
+              {customer.name
+                .split(" ")
+                .map((part) => part[0])
+                .slice(0, 2)
+                .join("")}
+            </span>
+            <div>
+              <strong>{customer.address}</strong>
+              <small>
+                {getNextVisit(customer)
+                  ? `Currently scheduled: ${getNextVisit(customer).date}`
+                  : "No upcoming cut scheduled"}
+              </small>
+            </div>
+          </div>
+        )}
+        <div className="date-shortcuts" aria-label="Quick date choices">
+          <button type="button" onClick={() => chooseOffset(1)}>
+            Latest visit + 7 days
+          </button>
+          <button type="button" onClick={() => chooseOffset(2)}>
+            Latest visit + 14 days
+          </button>
+          <button
+            type="button"
+            onClick={() => setDate(isoDate(formatDate(new Date())))}
+          >
+            Today
+          </button>
+        </div>
+        <div className="form-grid">
+          <Field
+            label="Date"
+            type="date"
+            required
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+          />
+          <Field
+            label="Arrival window"
+            options={TIMES}
+            value={time}
+            onChange={(event) => setTime(event.target.value)}
+          />
+        </div>
+        <Field
+          label="Service"
+          required
+          value={service}
+          onChange={(event) => setService(event.target.value)}
+        />
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={repeat}
+            onChange={(event) => setRepeat(event.target.checked)}
+          />
+          Add 4 weekly cuts starting on this date
+        </label>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" icon="calendar">
+            {repeat ? "Schedule 4 cuts" : "Schedule cut"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 function WeatherForm({ customer, onSave, onClose }) {
   const [text, setText] = useState(customer.weatherNotice);
   return (
@@ -1030,6 +1181,7 @@ function Owner({ customers, update, create, remove, writable }) {
   const [detailTab, setDetailTab] = useState("Schedule");
   const [modal, setModal] = useState(null);
   const [notice, setNotice] = useState("");
+  const [scheduleFilter, setScheduleFilter] = useState("All upcoming");
   const selected = customers.find((item) => item.id === selectedId);
   const modalCustomer = customers.find((item) => item.id === modal?.customerId);
   const due = customers.filter((item) => Number(item.balance) > 0);
@@ -1052,6 +1204,23 @@ function Owner({ customers, update, create, remove, writable }) {
     .filter(({ request }) => request.status !== "Handled");
   const today = formatDate(new Date());
   const todayCuts = scheduled.filter(({ visit }) => visit.date === today);
+  const todayDate = dateObject(today);
+  const nextWeekDate = new Date(todayDate);
+  nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+  const overdueCuts = scheduled.filter(
+    ({ visit }) => dateObject(visit.date) < todayDate,
+  );
+  const weekCuts = scheduled.filter(({ visit }) => {
+    const date = dateObject(visit.date);
+    return date >= todayDate && date <= nextWeekDate;
+  });
+  const unscheduled = customers.filter((customer) => !getNextVisit(customer));
+  const shownSchedule =
+    scheduleFilter === "Next 7 days"
+      ? weekCuts
+      : scheduleFilter === "Overdue"
+        ? overdueCuts
+        : scheduled;
   const filtered = customers.filter(
     (customer) =>
       `${customer.name} ${customer.address} ${customer.code}`
@@ -1190,13 +1359,23 @@ function Owner({ customers, update, create, remove, writable }) {
                     : "Keep up with customer notes and requests."}
             </p>
           </div>
-          <Button
-            icon="plus"
-            disabled={!writable}
-            onClick={() => open("create")}
-          >
-            Add customer
-          </Button>
+          <div className="page-actions">
+            <Button
+              variant="secondary"
+              icon="plus"
+              disabled={!writable}
+              onClick={() => open("create")}
+            >
+              Add customer
+            </Button>
+            <Button
+              icon="calendar"
+              disabled={!writable || !customers.length}
+              onClick={() => open("quick-schedule")}
+            >
+              Schedule a cut
+            </Button>
+          </div>
         </div>
         {notice && (
           <div className="notice" role="status">
@@ -1321,22 +1500,116 @@ function Owner({ customers, update, create, remove, writable }) {
                 </div>
               </section>
             </div>
+            <section className="panel schedule-shortcut">
+              <div>
+                <span className="eyebrow">QUICK SCHEDULING</span>
+                <h2>Put the next cut on the calendar</h2>
+                <p>
+                  Choose a customer. Their usual service and time will be ready
+                  for you.
+                </p>
+              </div>
+              <Button
+                icon="calendar"
+                disabled={!writable || !customers.length}
+                onClick={() => open("quick-schedule")}
+              >
+                Schedule a cut
+              </Button>
+            </section>
           </>
         )}
         {view === "Schedule" && (
-          <section className="panel">
-            <SectionHead
-              title="Upcoming cuts"
-              detail={`${scheduled.length} scheduled across ${customers.length} customers`}
-            />
-            {scheduled.length ? (
-              routeRows(scheduled)
-            ) : (
-              <Empty title="No cuts scheduled">
-                Choose a customer to add a cut.
-              </Empty>
-            )}
-          </section>
+          <div className="schedule-center">
+            <div className="schedule-stats">
+              <button onClick={() => setScheduleFilter("Next 7 days")}>
+                <span>Next 7 days</span>
+                <strong>{weekCuts.length}</strong>
+                <small>cuts</small>
+              </button>
+              <button
+                className={overdueCuts.length ? "attention" : ""}
+                onClick={() => setScheduleFilter("Overdue")}
+              >
+                <span>Overdue</span>
+                <strong>{overdueCuts.length}</strong>
+                <small>need attention</small>
+              </button>
+              <button onClick={() => setScheduleFilter("All upcoming")}>
+                <span>Not scheduled</span>
+                <strong>{unscheduled.length}</strong>
+                <small>customers</small>
+              </button>
+            </div>
+            <div className="schedule-columns">
+              <section className="panel">
+                <SectionHead
+                  title="Upcoming cuts"
+                  detail={`${shownSchedule.length} shown · ${scheduled.length} total`}
+                >
+                  <div className="schedule-filter">
+                    <select
+                      aria-label="Filter schedule"
+                      value={scheduleFilter}
+                      onChange={(event) =>
+                        setScheduleFilter(event.target.value)
+                      }
+                    >
+                      {["All upcoming", "Next 7 days", "Overdue"].map(
+                        (item) => (
+                          <option key={item}>{item}</option>
+                        ),
+                      )}
+                    </select>
+                    <Button
+                      icon="plus"
+                      disabled={!writable || !customers.length}
+                      onClick={() => open("quick-schedule")}
+                    >
+                      Add cut
+                    </Button>
+                  </div>
+                </SectionHead>
+                {shownSchedule.length ? (
+                  routeRows(shownSchedule)
+                ) : (
+                  <Empty title="Nothing in this view">
+                    Choose another filter or schedule a cut.
+                  </Empty>
+                )}
+              </section>
+              <section className="panel unscheduled-panel">
+                <SectionHead
+                  title="Needs a next cut"
+                  detail={`${unscheduled.length} customers without an upcoming visit`}
+                />
+                {unscheduled.length ? (
+                  unscheduled.map((customer) => (
+                    <div className="unscheduled-row" key={customer.id}>
+                      <button
+                        className="row-link"
+                        onClick={() => pick(customer)}
+                      >
+                        <strong>{customer.name}</strong>
+                        <span>{customer.address}</span>
+                      </button>
+                      <Button
+                        variant="secondary"
+                        disabled={!writable}
+                        onClick={() => open("quick-schedule", customer)}
+                      >
+                        Schedule
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <Empty title="Everyone is scheduled">
+                    Every customer has an upcoming cut.
+                  </Empty>
+                )}
+              </section>
+            </div>
+          </div>
         )}
         {view === "Customers" && (
           <div className={`customers-layout ${selected ? "has-selected" : ""}`}>
@@ -1697,6 +1970,20 @@ function Owner({ customers, update, create, remove, writable }) {
             pick(customer);
           }}
           onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === "quick-schedule" && (
+        <QuickScheduleForm
+          customers={customers}
+          initialCustomer={modalCustomer}
+          onClose={() => setModal(null)}
+          onSave={(customer, next, scheduledDate) => {
+            update(customer.id, () => next);
+            setModal(null);
+            setNotice(
+              `Cut scheduled for ${customer.name} on ${scheduledDate}.`,
+            );
+          }}
         />
       )}
       {modalCustomer && modal?.type === "edit" && (
