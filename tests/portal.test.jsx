@@ -99,16 +99,49 @@ test("owner can schedule the next cut from the main dashboard", async () => {
   await user.click(
     screen.getAllByRole("button", { name: "Schedule a cut" })[0],
   );
-  const dialog = screen.getByRole("dialog", { name: "Schedule a cut" });
-  assert.equal(within(dialog).getByLabelText("Customer").value, "10");
-  assert.equal(within(dialog).getByLabelText("Service").value, "Weekly Mow");
-  assert.equal(within(dialog).getByLabelText("Date").value, "2026-09-17");
+  const dialog = screen.getByRole("dialog", { name: "Quick schedule" });
   await user.click(
-    within(dialog).getByRole("button", { name: "Schedule cut" }),
+    within(dialog).getByRole("button", {
+      name: "Schedule Demo Customer for September 17, 2026",
+    }),
   );
   await waitFor(() => assert.equal(cloud.data[0].visits.length, 2));
   assert.equal(cloud.data[0].visits[1].date, "September 17, 2026");
   assert.equal(cloud.data[0].code, "DEMO10");
+});
+
+test("owner history includes legacy records and every completed visit", async () => {
+  const cloud = mockCloud();
+  cloud.data[0].history = [
+    {
+      date: "August 20, 2026",
+      service: "Weekly Mow",
+      status: "Completed",
+    },
+  ];
+  cloud.data[0].visits.push({
+    id: 2,
+    date: "August 27, 2026",
+    time: "8:00–10:00 AM",
+    service: "Weekly Mow",
+    status: "Completed",
+    weather: "Clear",
+  });
+  render(<App />);
+  const user = await login(ADMIN_CODE);
+  await user.click(screen.getByRole("button", { name: "History" }));
+  assert.ok(screen.getByText("All completed lawns"));
+  assert.ok(
+    screen.getByLabelText(
+      "Demo Customer, August 20, 2026, Weekly Mow, completed",
+    ),
+  );
+  assert.ok(
+    screen.getByLabelText(
+      "Demo Customer, August 27, 2026, Weekly Mow, completed",
+    ),
+  );
+  assert.match(screen.getByText(/2 of 2 cuts shown/).textContent, /2 of 2/);
 });
 
 test("owner customer details, quick scheduling, and request handling work", async () => {
