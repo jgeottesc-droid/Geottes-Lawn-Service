@@ -1564,6 +1564,112 @@ textarea {
 .date-shortcuts button:hover {
   background: #eaf2e3;
 }
+.quick-pick-list {
+  display: grid;
+  gap: 8px;
+  max-height: 430px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+.quick-pick-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 13px;
+  text-align: left;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.quick-pick-row:hover,
+.quick-pick-row:focus-visible {
+  border-color: #8eae7e;
+  background: #f7faf4;
+}
+.quick-pick-customer,
+.quick-pick-date {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.quick-pick-customer strong,
+.quick-pick-customer small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-pick-row small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.quick-pick-date {
+  text-align: right;
+}
+.quick-pick-date strong {
+  font-size: 0.8rem;
+}
+.quick-pick-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--green);
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.custom-schedule-details {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+}
+.custom-schedule-details summary {
+  color: var(--green);
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.custom-schedule-details .quick-schedule-form {
+  margin-top: 16px;
+}
+.history-center {
+  display: grid;
+  gap: 20px;
+}
+.history-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: 12px;
+}
+.history-summary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+}
+.history-summary span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.history-summary strong {
+  font:
+    600 1.5rem/1 Manrope,
+    sans-serif;
+}
+.history-search {
+  width: min(360px, 100%);
+}
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 0;
+  border-top: 1px solid #edf0e9;
+}
 .payment-summary {
   padding: 17px 20px;
   background: #f1f6ea;
@@ -1890,6 +1996,21 @@ textarea {
   }
   .date-shortcuts {
     grid-template-columns: 1fr;
+  }
+  .quick-pick-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .quick-pick-date {
+    display: none;
+  }
+  .history-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .history-search {
+    width: 100%;
+  }
+  .history-row {
+    align-items: flex-start;
   }
   .stat {
     padding: 16px;
