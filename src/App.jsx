@@ -157,6 +157,27 @@ function Pill({ children }) {
       : "neutral";
   return <span className={`pill ${tone}`}>{children}</span>;
 }
+
+function serviceHistory(customer) {
+  const legacy = arr(customer?.history).map((item, index) => ({
+    ...item,
+    id: `history-${index}`,
+    status: item.status || "Completed",
+  }));
+  const completedVisits = getVisits(customer)
+    .filter((visit) => visit.status === "Completed")
+    .map((visit) => ({ ...visit, id: `visit-${visit.id}` }));
+  const seen = new Set();
+
+  return [...legacy, ...completedVisits]
+    .filter((item) => {
+      const key = `${item.date}|${item.service}|${item.status}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => dateObject(b.date) - dateObject(a.date));
+}
 function Field({ label, options, area, ...props }) {
   return (
     <label className="field">
@@ -618,13 +639,16 @@ function CustomerPortal({ customer, update, writable }) {
       {tab === "History" && (
         <section className="panel">
           <SectionHead title="Service history" />
-          {customer.history.length ? (
-            [...customer.history].reverse().map((item, index) => (
-              <div className="visit-line" key={index}>
+          {serviceHistory(customer).length ? (
+            serviceHistory(customer).map((item) => (
+              <div className="visit-line" key={item.id}>
                 <DateBadge date={item.date} />
                 <div className="grow">
                   <strong>{item.service}</strong>
-                  <p>{item.date}</p>
+                  <p>
+                    {item.date}
+                    {item.time ? ` · ${item.time}` : ""}
+                  </p>
                 </div>
                 <Pill>{item.status}</Pill>
               </div>
@@ -969,15 +993,37 @@ function QuickScheduleForm({ customers, initialCustomer, onSave, onClose }) {
   const customer = customers.find(
     (item) => String(item.id) === String(customerId),
   );
+  const quickCustomers = [...customers].sort(
+    (a, b) =>
+      Number(Boolean(getNextVisit(a))) - Number(Boolean(getNextVisit(b))),
+  );
+
+  function suggestedCut(item) {
+    const latest = [...getVisits(item)].sort(
+      (a, b) => dateObject(b.date) - dateObject(a.date),
+    )[0];
+    return {
+      date: addWeeks(latest?.date || formatDate(new Date()), 1),
+      time: latest?.time || TIMES[0],
+      service: latest?.service || item.service,
+    };
+  }
+
+  function scheduleRecommended(item) {
+    const draft = suggestedCut(item);
+    try {
+      onSave(item, appendVisits(item, draft), draft.date);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   useEffect(() => {
     if (!customer) return;
-    const latest = [...getVisits(customer)].sort(
-      (a, b) => dateObject(b.date) - dateObject(a.date),
-    )[0];
-    setDate(isoDate(addWeeks(latest?.date || formatDate(new Date()), 1)));
-    setTime(latest?.time || TIMES[0]);
-    setService(latest?.service || customer.service);
+    const draft = suggestedCut(customer);
+    setDate(isoDate(draft.date));
+    setTime(draft.time);
+    setService(draft.service);
     setError("");
   }, [customerId]);
 
@@ -1008,100 +1054,139 @@ function QuickScheduleForm({ customers, initialCustomer, onSave, onClose }) {
 
   return (
     <Modal
-      title="Schedule a cut"
-      subtitle="The usual service and time are already filled in."
+      title="Quick schedule"
+      subtitle="Choose a customer and their next cut is scheduled."
       onClose={onClose}
     >
-      <form className="form-stack quick-schedule-form" onSubmit={submit}>
-        <label className="field">
-          <span>Customer</span>
-          <select
-            value={customerId}
-            onChange={(event) => setCustomerId(event.target.value)}
-          >
-            {customers.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {customer && (
-          <div className="schedule-customer-summary">
-            <span className="avatar">
-              {customer.name
-                .split(" ")
-                .map((part) => part[0])
-                .slice(0, 2)
-                .join("")}
-            </span>
-            <div>
-              <strong>{customer.address}</strong>
-              <small>
-                {getNextVisit(customer)
-                  ? `Currently scheduled: ${getNextVisit(customer).date}`
-                  : "No upcoming cut scheduled"}
-              </small>
+      <div
+        className="quick-pick-list"
+        aria-label="Choose a customer to schedule"
+      >
+        {quickCustomers.map((item) => {
+          const draft = suggestedCut(item);
+          return (
+            <button
+              type="button"
+              className="quick-pick-row"
+              key={item.id}
+              onClick={() => scheduleRecommended(item)}
+              aria-label={`Schedule ${item.name} for ${draft.date}`}
+            >
+              <span className="avatar">
+                {item.name
+                  .split(" ")
+                  .map((part) => part[0])
+                  .slice(0, 2)
+                  .join("")}
+              </span>
+              <span className="quick-pick-customer">
+                <strong>{item.name}</strong>
+                <small>{item.address}</small>
+              </span>
+              <span className="quick-pick-date">
+                <strong>{draft.date}</strong>
+                <small>{draft.service}</small>
+              </span>
+              <span className="quick-pick-action">
+                Schedule <Icon name="arrow" size={16} />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <details className="custom-schedule-details">
+        <summary>Choose a different date or time</summary>
+        <form className="form-stack quick-schedule-form" onSubmit={submit}>
+          <label className="field">
+            <span>Customer</span>
+            <select
+              value={customerId}
+              onChange={(event) => setCustomerId(event.target.value)}
+            >
+              {customers.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {customer && (
+            <div className="schedule-customer-summary">
+              <span className="avatar">
+                {customer.name
+                  .split(" ")
+                  .map((part) => part[0])
+                  .slice(0, 2)
+                  .join("")}
+              </span>
+              <div>
+                <strong>{customer.address}</strong>
+                <small>
+                  {getNextVisit(customer)
+                    ? `Currently scheduled: ${getNextVisit(customer).date}`
+                    : "No upcoming cut scheduled"}
+                </small>
+              </div>
             </div>
+          )}
+          <div className="date-shortcuts" aria-label="Quick date choices">
+            <button type="button" onClick={() => chooseOffset(1)}>
+              Latest visit + 7 days
+            </button>
+            <button type="button" onClick={() => chooseOffset(2)}>
+              Latest visit + 14 days
+            </button>
+            <button
+              type="button"
+              onClick={() => setDate(isoDate(formatDate(new Date())))}
+            >
+              Today
+            </button>
           </div>
-        )}
-        <div className="date-shortcuts" aria-label="Quick date choices">
-          <button type="button" onClick={() => chooseOffset(1)}>
-            Latest visit + 7 days
-          </button>
-          <button type="button" onClick={() => chooseOffset(2)}>
-            Latest visit + 14 days
-          </button>
-          <button
-            type="button"
-            onClick={() => setDate(isoDate(formatDate(new Date())))}
-          >
-            Today
-          </button>
-        </div>
-        <div className="form-grid">
+          <div className="form-grid">
+            <Field
+              label="Date"
+              type="date"
+              required
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+            />
+            <Field
+              label="Arrival window"
+              options={TIMES}
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+            />
+          </div>
           <Field
-            label="Date"
-            type="date"
+            label="Service"
             required
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
+            value={service}
+            onChange={(event) => setService(event.target.value)}
           />
-          <Field
-            label="Arrival window"
-            options={TIMES}
-            value={time}
-            onChange={(event) => setTime(event.target.value)}
-          />
-        </div>
-        <Field
-          label="Service"
-          required
-          value={service}
-          onChange={(event) => setService(event.target.value)}
-        />
-        <label className="check-label">
-          <input
-            type="checkbox"
-            checked={repeat}
-            onChange={(event) => setRepeat(event.target.checked)}
-          />
-          Add 4 weekly cuts starting on this date
-        </label>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="modal-actions">
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" icon="calendar">
-            {repeat ? "Schedule 4 cuts" : "Schedule cut"}
-          </Button>
-        </div>
-      </form>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={repeat}
+              onChange={(event) => setRepeat(event.target.checked)}
+            />
+            Add 4 weekly cuts starting on this date
+          </label>
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" icon="calendar">
+              {repeat ? "Schedule 4 cuts" : "Schedule cut"}
+            </Button>
+          </div>
+        </form>
+      </details>
     </Modal>
   );
 }
@@ -1182,6 +1267,7 @@ function Owner({ customers, update, create, remove, writable }) {
   const [modal, setModal] = useState(null);
   const [notice, setNotice] = useState("");
   const [scheduleFilter, setScheduleFilter] = useState("All upcoming");
+  const [historySearch, setHistorySearch] = useState("");
   const selected = customers.find((item) => item.id === selectedId);
   const modalCustomer = customers.find((item) => item.id === modal?.customerId);
   const due = customers.filter((item) => Number(item.balance) > 0);
@@ -1221,6 +1307,16 @@ function Owner({ customers, update, create, remove, writable }) {
       : scheduleFilter === "Overdue"
         ? overdueCuts
         : scheduled;
+  const completedCuts = customers
+    .flatMap((customer) =>
+      serviceHistory(customer).map((item) => ({ customer, item })),
+    )
+    .sort((a, b) => dateObject(b.item.date) - dateObject(a.item.date));
+  const shownHistory = completedCuts.filter(({ customer, item }) =>
+    `${customer.name} ${customer.address} ${item.date} ${item.service}`
+      .toLowerCase()
+      .includes(historySearch.toLowerCase()),
+  );
   const filtered = customers.filter(
     (customer) =>
       `${customer.name} ${customer.address} ${customer.code}`
@@ -1305,6 +1401,7 @@ function Owner({ customers, update, create, remove, writable }) {
             ["Overview", "grid"],
             ["Customers", "users"],
             ["Schedule", "calendar"],
+            ["History", "history"],
             ["Messages", "message"],
           ].map(([label, icon]) => (
             <button
@@ -1356,7 +1453,9 @@ function Owner({ customers, update, create, remove, writable }) {
                   ? "Everything for each customer, together."
                   : view === "Schedule"
                     ? "Every upcoming cut, in date order."
-                    : "Keep up with customer notes and requests."}
+                    : view === "History"
+                      ? "Every lawn you’ve completed, all in one place."
+                      : "Keep up with customer notes and requests."}
             </p>
           </div>
           <div className="page-actions">
@@ -1885,10 +1984,10 @@ function Owner({ customers, update, create, remove, writable }) {
                       </div>
                       <details className="history-details">
                         <summary>
-                          Service history ({selected.history.length})
+                          Service history ({serviceHistory(selected).length})
                         </summary>
-                        {selected.history.map((item, index) => (
-                          <div className="message-item" key={index}>
+                        {serviceHistory(selected).map((item) => (
+                          <div className="message-item" key={item.id}>
                             <strong>{item.date}</strong>
                             <p>
                               {item.service} · {item.status}
@@ -1917,6 +2016,76 @@ function Owner({ customers, update, create, remove, writable }) {
                     Schedule cuts, record payments, and manage their portal.
                   </p>
                 </div>
+              )}
+            </section>
+          </div>
+        )}
+        {view === "History" && (
+          <div className="history-center">
+            <div className="history-summary">
+              <div>
+                <span>Completed lawns</span>
+                <strong>{completedCuts.length}</strong>
+              </div>
+              <div>
+                <span>Customers served</span>
+                <strong>
+                  {
+                    new Set(completedCuts.map(({ customer }) => customer.id))
+                      .size
+                  }
+                </strong>
+              </div>
+            </div>
+            <section className="panel">
+              <SectionHead
+                title="All completed lawns"
+                detail={`${shownHistory.length} of ${completedCuts.length} cuts shown`}
+              >
+                <div className="search-field history-search">
+                  <Icon name="search" />
+                  <input
+                    aria-label="Search completed lawns"
+                    placeholder="Customer, address, service, or date"
+                    value={historySearch}
+                    onChange={(event) => setHistorySearch(event.target.value)}
+                  />
+                </div>
+              </SectionHead>
+              {shownHistory.length ? (
+                shownHistory.map(({ customer, item }) => (
+                  <div
+                    className="history-row"
+                    key={`${customer.id}-${item.id}`}
+                    aria-label={`${customer.name}, ${item.date}, ${item.service}, completed`}
+                  >
+                    <DateBadge date={item.date} />
+                    <button
+                      className="row-link grow"
+                      onClick={() => pick(customer)}
+                    >
+                      <strong>{customer.name}</strong>
+                      <span>{customer.address}</span>
+                      <small>
+                        {item.service}
+                        {item.time ? ` · ${item.time}` : ""}
+                      </small>
+                    </button>
+                    <Pill>{item.status}</Pill>
+                  </div>
+                ))
+              ) : (
+                <Empty
+                  title={
+                    completedCuts.length
+                      ? "No matching cuts"
+                      : "No completed lawns yet"
+                  }
+                >
+                  {completedCuts.length
+                    ? "Try another customer, address, service, or date."
+                    : "Cuts appear here as soon as you mark them complete."}
+                </Empty>
               )}
             </section>
           </div>
@@ -1957,7 +2126,7 @@ function Owner({ customers, update, create, remove, writable }) {
           Geottes Lawn Service{" "}
           <span>
             {customers.length} customer portals · {scheduled.length} upcoming
-            cuts
+            cuts · {completedCuts.length} completed
           </span>
         </footer>
       </main>
