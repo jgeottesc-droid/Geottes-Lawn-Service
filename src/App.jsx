@@ -1,1118 +1,1983 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ADMIN_CODE,
+  VENMO,
+  TIMES,
+  STATUSES,
+  WEATHER,
+  REQUESTS,
+  arr,
+  firstName,
+  normalizeCustomer,
+  getVisits,
+  getNextVisit,
+  dateObject,
+  formatDate,
+  addWeeks,
+  visitText,
+  paymentState,
+  venmoLink,
+  loadCloudCustomers,
+  saveCloudCustomers,
+  saveCustomers,
+  money,
+  isoDate,
+  fromISO,
+  recordPayment,
+  changeVisit,
+  appendVisits,
+} from "./data";
 
-const ADMIN_CODE = "GEOTTESADMIN";
-const VENMO = "@Jesse-Geottes";
-const STORAGE_KEY = "geottes-lawn-service-clean";
-
-const SUPABASE_URL = "https://kwvgpkefpttvgsdegfee.supabase.co";
-const SUPABASE_KEY = "sb_publishable__nV9FlNQQOwbvKQbj7a10w_eUqqXVXe";
-const SUPABASE_TABLE = "customers";
-const CLOUD_ROW_ID = 1;
-
-const YEARS = [2026, 2027, 2028, 2029];
-const MONTHS = ["March", "April", "May", "June", "July", "August", "September", "October"];
-const MONTH_INDEX = { March: 2, April: 3, May: 4, June: 5, July: 6, August: 7, September: 8, October: 9 };
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const TIMES = ["8:00–10:00 AM", "9:00–11:00 AM", "10:00 AM–12:00 PM", "11:00 AM–1:00 PM", "12:00–2:00 PM", "1:00–3:00 PM", "2:00–4:00 PM", "3:00–5:00 PM", "4:00–6:00 PM", "5:00–7:00 PM"];
-const STATUSES = ["Scheduled", "Starting Soon", "In Progress", "Completed", "Needs Review", "Weather Delay"];
-const WEATHER = ["Clear", "Watch Weather", "Rain Delay", "Move to Tomorrow"];
-const REQUESTS = ["Request reschedule", "Skip next cut", "Add extra trimming", "Request mulch quote", "Report an issue"];
-
-function arr(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function firstName(name) {
-  return (name || "Customer").trim().split(" ")[0] || "Customer";
-}
-
-function normalizeCustomer(customer = {}) {
-  const balance = Number(customer.balance) || 0;
-
-  return {
-    id: Number(customer.id) || Date.now(),
-    name: customer.name || "Customer",
-    address: customer.address || "",
-    code: String(customer.code || "").toUpperCase(),
-    service: customer.service || "Weekly Mow",
-    balance,
-    paid: customer.paid ?? balance <= 0,
-    paymentStatus: customer.paymentStatus || (balance > 0 ? "Unpaid" : "Paid"),
-    paidDate: customer.paidDate || "",
-    paymentNote: customer.paymentNote || "",
-    notes: customer.notes || "",
-    weatherNotice: customer.weatherNotice || "",
-    visits: arr(customer.visits),
-    comments: arr(customer.comments),
-    requests: arr(customer.requests),
-    history: arr(customer.history)
+function Icon({ name, size = 20 }) {
+  const paths = {
+    grid: (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      </>
+    ),
+    users: (
+      <>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M20 8a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87" />
+        <circle cx="9" cy="7" r="4" />
+      </>
+    ),
+    calendar: (
+      <>
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M16 3v4M8 3v4M3 11h18M8 15h2M14 15h2" />
+      </>
+    ),
+    message: (
+      <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9H13a8.5 8.5 0 0 1 8 8v.5Z" />
+    ),
+    arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
+    check: <path d="m5 12 4 4L19 6" />,
+    plus: <path d="M12 5v14M5 12h14" />,
+    wallet: (
+      <>
+        <rect x="3" y="5" width="18" height="15" rx="2" />
+        <path d="M16 10h5v5h-5zM3 5l13-3v3" />
+      </>
+    ),
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+    leaf: (
+      <>
+        <path d="M20 3c-9-1-16 3-16 10a7 7 0 0 0 7 7c7 0 10-8 9-17Z" />
+        <path d="M4 21 15 10" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M9 5H4v14h5M10 12h11m-4-4 4 4-4 4" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m16 16 5 5" />
+      </>
+    ),
+    close: <path d="m6 6 12 12M6 18 18 6" />,
+    weather: (
+      <>
+        <path d="M7 15a4 4 0 1 1 .5-8A6 6 0 0 1 19 9a3 3 0 0 1-1 6H7ZM8 18l-1 3m6-3-1 3m6-3-1 3" />
+      </>
+    ),
+    pin: (
+      <>
+        <path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z" />
+        <circle cx="12" cy="10" r="2.5" />
+      </>
+    ),
+    chevron: <path d="m9 5 7 7-7 7" />,
+    history: (
+      <>
+        <path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2" />
+      </>
+    ),
   };
-}
-
-function makeVisit(id, date, time, service, status = "Scheduled", weather = "Clear") {
-  return { id, date, time, service, status, weather };
-}
-
-function getVisits(customer) {
-  return arr(customer?.visits);
-}
-
-function getNextVisit(customer) {
-  return getVisits(customer).find(visit => visit.status !== "Completed") || getVisits(customer)[0] || null;
-}
-
-function dateParts(label) {
-  const [monthRaw, dayRaw, yearRaw] = String(label || "March 1, 2026").replace(",", "").split(" ");
-
-  return {
-    month: MONTH_INDEX[monthRaw] !== undefined ? monthRaw : "March",
-    day: Number(dayRaw) || 1,
-    year: YEARS.includes(Number(yearRaw)) ? Number(yearRaw) : 2026
-  };
-}
-
-function dateObject(label) {
-  const parts = dateParts(label);
-  return new Date(parts.year, MONTH_INDEX[parts.month], parts.day);
-}
-
-function formatDate(date) {
-  return `${MONTHS[date.getMonth() - 2] || MONTHS[0]} ${date.getDate()}, ${date.getFullYear()}`;
-}
-
-function addWeeks(label, weeks) {
-  const date = dateObject(label);
-  date.setDate(date.getDate() + weeks * 7);
-  return formatDate(date);
-}
-
-function visitText(visit) {
-  if (!visit) return "No visit scheduled";
-  const date = dateObject(visit.date);
-  return `${DAYS[date.getDay()]}, ${formatDate(date)} • ${visit.time}`;
-}
-
-function todayText() {
-  return new Date().toLocaleDateString();
-}
-
-function paymentState(customer) {
-  const due = Number(customer.balance) || 0;
-  const status = customer.paymentStatus || (due > 0 ? "Unpaid" : "Paid");
-
-  if (status === "Paid" || due <= 0) return "paid";
-  if (status === "Pending") return "pending";
-  return "unpaid";
-}
-
-function venmoLink(customer) {
-  const amount = Number(customer.balance) || 0;
-  const note = encodeURIComponent(`Lawn service - ${customer.address || customer.name || "customer"}`);
-  return `https://venmo.com/Jesse-Geottes?txn=pay&amount=${amount}&note=${note}`;
-}
-
-function loadCustomers() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(saved) ? saved.map(normalizeCustomer) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveCustomers(customers) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
-}
-
-async function loadCloudCustomers() {
-  try {
-    const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${CLOUD_ROW_ID}&select=data`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Accept-Profile": "public"
-        }
-      }
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("Supabase load failed:", response.status, text);
-      return null;
-    }
-
-    const rows = await response.json();
-    const customers = rows?.[0]?.data?.customers;
-
-    return Array.isArray(customers) ? customers.map(normalizeCustomer) : null;
-  } catch (error) {
-    console.error("Supabase load crashed:", error);
-    return null;
-  }
-}
-
-async function saveCloudCustomers(customers) {
-  try {
-    const response = await fetch(
-      `${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${CLOUD_ROW_ID}`,
-      {
-        method: "PATCH",
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          "Accept-Profile": "public",
-          "Content-Profile": "public",
-          Prefer: "return=representation"
-        },
-        body: JSON.stringify({
-          code: "APP_STATE",
-          data: { customers },
-          updated_at: new Date().toISOString()
-        })
-      }
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("Supabase save failed:", response.status, text);
-      return false;
-    }
-
-    console.log("Supabase save worked");
-    return true;
-  } catch (error) {
-    console.error("Supabase save crashed:", error);
-    return false;
-  }
-}
-
-function Button({ children, onClick, type = "button", variant = "primary", disabled = false }) {
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`btn btn-${variant}`}>
-      {children}
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name] || paths.leaf}
+    </svg>
+  );
+}
+function Button({
+  children,
+  icon,
+  variant = "primary",
+  className = "",
+  ...props
+}) {
+  return (
+    <button
+      type="button"
+      className={`btn btn-${variant} ${className}`}
+      {...props}
+    >
+      {icon && <Icon name={icon} />} {children}
     </button>
   );
 }
-
-function Card({ children, className = "" }) {
-  return <div className={`card ${className}`}>{children}</div>;
+function Brand({ inverse = false }) {
+  return (
+    <div className={`brand ${inverse ? "inverse" : ""}`}>
+      <span className="brand-mark">
+        <Icon name="leaf" size={25} />
+      </span>
+      <span>
+        GEOTTES<small>LAWN SERVICE</small>
+      </span>
+    </div>
+  );
 }
-
-function Field({ label, value, onChange, options, type = "text", area = false }) {
+function Pill({ children }) {
+  const tone = ["Paid", "Completed", "Clear", "Handled"].includes(children)
+    ? "green"
+    : ["Unpaid", "Rain Delay", "Weather Delay"].includes(children)
+      ? "amber"
+      : "neutral";
+  return <span className={`pill ${tone}`}>{children}</span>;
+}
+function Field({ label, options, area, ...props }) {
   return (
     <label className="field">
       <span>{label}</span>
       {options ? (
-        <select value={value} onChange={event => onChange(event.target.value)}>
-          {options.map(option => <option key={option}>{option}</option>)}
+        <select {...props}>
+          {options.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
         </select>
       ) : area ? (
-        <textarea value={value} onChange={event => onChange(event.target.value)} />
+        <textarea {...props} />
       ) : (
-        <input
-          type={type}
-          value={value}
-          min={type === "number" ? "0" : undefined}
-          step={type === "number" ? "0.01" : undefined}
-          onChange={event => onChange(event.target.value)}
-        />
+        <input {...props} />
       )}
     </label>
   );
 }
-
-function Pill({ children }) {
-  const text = String(children || "");
-  let color = "blue";
-
-  if (["Paid", "Completed", "Clear"].includes(text)) color = "green";
-  if (["Pending", "Needs Review", "Watch Weather"].includes(text)) color = "amber";
-  if (["Unpaid", "Rain Delay", "Weather Delay"].includes(text)) color = "red";
-
-  return <span className={`pill pill-${color}`}>{children}</span>;
-}
-function Header({ onSignOut, syncStatus, lastSynced }) {
-  const statusClass =
-    syncStatus === "Synced"
-      ? "sync-good"
-      : syncStatus === "Saving..."
-        ? "sync-saving"
-        : syncStatus === "Sync error"
-          ? "sync-error"
-          : "sync-neutral";
-
+function Empty({ title, children }) {
   return (
-    <header className="header">
-      <div className="brand">
-        <div className="logo">🌿</div>
-        <div>
-          <h1>Geottes Lawn Service</h1>
-          <p>Private customer portal</p>
-        </div>
-      </div>
-
-      <div className="header-actions">
-        <div className={`sync-badge ${statusClass}`}>
-          <span>{syncStatus || "Cloud sync"}</span>
-          {lastSynced && <small>{lastSynced}</small>}
-        </div>
-
-        <Button variant="secondary" onClick={onSignOut}>Sign Out</Button>
-      </div>
-    </header>
-  );
-}
-
-function CalendarPick({ value, onChange }) {
-  const selectedParts = dateParts(value);
-  const month = selectedParts.month;
-  const year = selectedParts.year;
-  const monthIndex = MONTH_INDEX[month];
-  const blanks = new Date(year, monthIndex, 1).getDay();
-  const totalDays = new Date(year, monthIndex + 1, 0).getDate();
-  const cells = [...Array(blanks).fill(null), ...Array.from({ length: totalDays }, (_, index) => index + 1)];
-
-  return (
-    <div className="calendar">
-      <h3>Choose date</h3>
-
-      <div className="chips">
-        {YEARS.map(item => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => onChange(`${month} ${selectedParts.day}, ${item}`)}
-            className={year === item ? "chip active-dark" : "chip"}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
-
-      <div className="chips">
-        {MONTHS.map(item => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => onChange(`${item} 1, ${year}`)}
-            className={month === item ? "chip active-green" : "chip"}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
-
-      <div className="weekdays">
-        {DAYS.map(day => <div key={day}>{day}</div>)}
-      </div>
-
-      <div className="calendar-grid">
-        {cells.map((day, index) => {
-          const label = day ? `${month} ${day}, ${year}` : "";
-          const selected = Boolean(day) && dateObject(value).toDateString() === dateObject(label).toDateString();
-          const weekday = day ? DAYS[new Date(year, monthIndex, day).getDay()] : "";
-
-          return (
-            <button
-              key={index}
-              type="button"
-              disabled={!day}
-              onClick={() => onChange(label)}
-              className={selected ? "day selected" : "day"}
-            >
-              <strong>{day || ""}</strong>
-              {day && <span>{weekday}</span>}
-            </button>
-          );
-        })}
-      </div>
+    <div className="empty">
+      <Icon name="leaf" size={26} />
+      <strong>{title}</strong>
+      {children && <p>{children}</p>}
     </div>
   );
 }
-
-function PaymentPanel({ customer }) {
-  const state = paymentState(customer);
-  const due = Number(customer.balance) || 0;
-  const status = customer.paymentStatus || (due > 0 ? "Unpaid" : "Paid");
-
+function SectionHead({ title, detail, children }) {
   return (
-    <Card className={`payment payment-${state}`}>
-      <p className="label">Payment</p>
-      <h2>{due > 0 ? `$${due}` : "Paid"}</h2>
-      <p>Venmo: <strong>{VENMO}</strong></p>
-      <p>Status: <strong>{status}</strong>{customer.paidDate ? ` • Paid ${customer.paidDate}` : ""}</p>
-      <a className={`pay-link pay-${state}`} href={venmoLink(customer)} target="_blank" rel="noreferrer">
-        {state === "paid" ? "Payment Complete" : "Pay with Venmo"}
-      </a>
-    </Card>
-  );
-}
-
-function VisitRow({ visit, editable, onChange, onDelete, canDelete }) {
-  return (
-    <div className="visit">
+    <div className="section-head">
       <div>
-        <div className="visit-title">
-          <strong>{visitText(visit)}</strong>
-          <Pill>{visit.status}</Pill>
-        </div>
-        <p>{visit.service}</p>
-        {visit.weather !== "Clear" && <Pill>{visit.weather}</Pill>}
+        <h2>{title}</h2>
+        {detail && <p>{detail}</p>}
       </div>
-
-      {editable && (
-        <div className="visit-actions">
-          <select value={visit.status} onChange={event => onChange({ status: event.target.value })}>
-            {STATUSES.map(status => <option key={status}>{status}</option>)}
-          </select>
-          <select
-            value={visit.weather}
-            onChange={event => onChange({
-              weather: event.target.value,
-              status: event.target.value === "Rain Delay" ? "Weather Delay" : visit.status
-            })}
-          >
-            {WEATHER.map(weather => <option key={weather}>{weather}</option>)}
-          </select>
-          <Button variant="secondary" disabled={!canDelete} onClick={onDelete}>Delete</Button>
-        </div>
-      )}
+      {children}
     </div>
   );
 }
-
-function Section({ title, children }) {
+function DateBadge({ date }) {
+  const parsed = dateObject(date);
   return (
-    <section className="section">
-      <h3>{title}</h3>
-      <div className="stack">{children}</div>
+    <div className="date-badge">
+      <span>{parsed.toLocaleDateString("en-US", { month: "short" })}</span>
+      <strong>{parsed.getDate()}</strong>
+    </div>
+  );
+}
+function Modal({ title, subtitle, children, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    dialog.showModal();
+    return () => dialog.close();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="modal"
+      aria-label={title}
+      onCancel={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="modal-head">
+        <div>
+          <h2>{title}</h2>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        <button
+          className="icon-button"
+          aria-label="Close dialog"
+          onClick={onClose}
+        >
+          <Icon name="close" />
+        </button>
+      </div>
+      {children}
+    </dialog>
+  );
+}
+function Login({ customers, ready, error: connectionError, onLogin, onRetry }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [show, setShow] = useState(false);
+  function submit(event) {
+    event.preventDefault();
+    const typed = code.trim().toUpperCase();
+    if (typed === ADMIN_CODE) return onLogin("owner");
+    const customer = customers.find((item) => item.code === typed);
+    if (customer) onLogin(customer.id);
+    else setError("That code wasn’t found. Check your code and try again.");
+  }
+  return (
+    <main className="login">
+      <div className="login-story">
+        <Brand inverse />
+        <div className="login-title">
+          <span className="overline">YOUR LAWN, TAKEN CARE OF.</span>
+          <h1>
+            A little less
+            <br />
+            on your <em>list.</em>
+          </h1>
+          <p>
+            Your next cut, payments, and a direct line to Jesse. All in one
+            place.
+          </p>
+          <div className="login-features">
+            <span>
+              <Icon name="calendar" /> Know what’s next
+            </span>
+            <span>
+              <Icon name="wallet" /> Pay in a moment
+            </span>
+            <span>
+              <Icon name="message" /> Stay in touch
+            </span>
+          </div>
+        </div>
+        <span className="login-foot">
+          Geottes Lawn Service · Customer & owner access
+        </span>
+      </div>
+      <div className="login-entry">
+        <div className="login-form">
+          <span className="eyebrow">WELCOME BACK</span>
+          <h2>
+            Your lawn.
+            <br />
+            Your portal.
+          </h2>
+          <p>Enter the private code Jesse gave you.</p>
+          <form onSubmit={submit}>
+            <label className="field">
+              <span>Portal code</span>
+              <div className="password-field">
+                <input
+                  autoComplete="current-password"
+                  autoCapitalize="characters"
+                  spellCheck="false"
+                  type={show ? "text" : "password"}
+                  value={code}
+                  onChange={(event) => {
+                    setCode(event.target.value);
+                    setError("");
+                  }}
+                  placeholder="Your private code"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow(!show)}
+                  aria-label={show ? "Hide code" : "Show code"}
+                >
+                  {show ? "Hide" : "Show"}
+                </button>
+              </div>
+            </label>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {connectionError && (
+              <div className="error" role="alert">
+                Your portal couldn’t connect.{" "}
+                <button type="button" onClick={onRetry}>
+                  Try again
+                </button>
+              </div>
+            )}
+            <Button
+              type="submit"
+              icon="arrow"
+              disabled={!ready || !code.trim()}
+              className="full"
+            >
+              {ready ? "Open my portal" : "Connecting…"}
+            </Button>
+          </form>
+          <p className="login-help">
+            Use your existing customer or owner code.
+          </p>
+        </div>
+        <span className="entry-foot">
+          <Icon name="leaf" size={16} /> A well-kept lawn starts here.
+        </span>
+      </div>
+    </main>
+  );
+}
+function PaymentCard({ customer }) {
+  const due = Number(customer.balance) || 0;
+  return (
+    <section className="panel payment-card">
+      <div className="section-head">
+        <span className="eyebrow">YOUR BALANCE</span>
+        <Pill>{due <= 0 ? "Paid" : customer.paymentStatus}</Pill>
+      </div>
+      <div className="balance">{money(due)}</div>
+      <p>
+        {due > 0 ? "For your lawn service" : "You’re all caught up. Thank you!"}
+      </p>
+      {due > 0 && (
+        <a
+          className="btn btn-primary full"
+          href={venmoLink(customer)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Pay with Venmo <Icon name="arrow" />
+        </a>
+      )}
+      <small>
+        {VENMO}
+        {customer.paidDate && due <= 0 ? ` · Paid ${customer.paidDate}` : ""}
+      </small>
     </section>
   );
 }
-function Collapsible({ title, children, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen);
-
+function NextCut({ customer }) {
+  const visit = getNextVisit(customer);
   return (
-    <Card className="collapse-card">
-      <button type="button" className="collapse-header" onClick={() => setOpen(current => !current)}>
-        <span>{title}</span>
-        <strong>{open ? "−" : "+"}</strong>
-      </button>
-
-      {open && <div className="collapse-body">{children}</div>}
-    </Card>
+    <section className="next-cut">
+      <div className="section-head">
+        <span className="overline">NEXT ON YOUR LAWN</span>
+        <Icon name="calendar" size={24} />
+      </div>
+      {visit ? (
+        <>
+          <h2>{visit.date}</h2>
+          <p className="next-time">{visit.time}</p>
+          <div className="next-bottom">
+            <span>{visit.service}</span>
+            <Pill>{visit.status}</Pill>
+          </div>
+        </>
+      ) : (
+        <>
+          <h2>
+            A fresh cut
+            <br />
+            is on the way.
+          </h2>
+          <p>Jesse will update your next visit here.</p>
+          <div className="next-bottom">
+            <span>{customer.service}</span>
+            <Pill>Not scheduled</Pill>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
-function Login({ customers, onAdmin, onCustomer }) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
-
-  const submit = event => {
+function CustomerPortal({ customer, update, writable }) {
+  const [tab, setTab] = useState("Home");
+  const [mode, setMode] = useState("Comment");
+  const [message, setMessage] = useState("");
+  const [request, setRequest] = useState(REQUESTS[0]);
+  const [sent, setSent] = useState("");
+  const visits = getVisits(customer)
+    .filter((visit) => visit.status !== "Completed")
+    .sort((a, b) => dateObject(a.date) - dateObject(b.date));
+  const weather =
+    customer.weatherNotice ||
+    visits.find((visit) => visit.weather && visit.weather !== "Clear")?.weather;
+  function send(event) {
     event.preventDefault();
-    const typed = code.trim().toUpperCase();
-
-    if (typed === ADMIN_CODE) {
-      onAdmin();
-      return;
-    }
-
-    const customer = customers.find(item => item.code === typed);
-
-    if (!customer) {
-      setError("That code was not found. Double-check the private portal code.");
-      return;
-    }
-
-    onCustomer(customer.id);
-  };
-
+    if (!writable || (mode === "Comment" && !message.trim())) return;
+    update(customer.id, (current) =>
+      mode === "Comment"
+        ? { ...current, comments: [...arr(current.comments), message.trim()] }
+        : {
+            ...current,
+            requests: [
+              ...arr(current.requests),
+              { type: request, note: message.trim(), status: "New" },
+            ],
+          },
+    );
+    setMessage("");
+    setSent(
+      mode === "Comment"
+        ? "Your comment has been added."
+        : "Your request has been added. Jesse will review it.",
+    );
+  }
   return (
-    <main className="login">
-      <div className="login-bg" />
-      <div className="login-content">
-        <section className="hero">
-          <p>Private Lawn Portal</p>
-          <h2>Geottes Lawn Service</h2>
-          <span>Customers can view upcoming cuts, payment status, comments, requests, and weather updates.</span>
-        </section>
-
-        <Card className="login-card">
-          <h3>Open Your Portal</h3>
-          <p>Enter your private code below.</p>
-
-          <form onSubmit={submit}>
-            <input
-              className="code-input"
-              value={code}
-              onChange={event => {
-                setCode(event.target.value);
-                setError("");
-              }}
-              placeholder="Enter private code"
-            />
-            {error && <p className="error">{error}</p>}
-            <Button type="submit">Open Portal</Button>
-          </form>
-
-          <p className="hint">Enter your customer or admin portal code.</p>
-        </Card>
+    <main className="customer-page">
+      <div className="page-title">
+        <div>
+          <span className="eyebrow">YOUR CUSTOMER PORTAL</span>
+          <h1>
+            Hi, {firstName(customer.name)}
+            <span className="title-dot">.</span>
+          </h1>
+          <p>
+            <Icon name="pin" size={17} />
+            {customer.address}
+          </p>
+        </div>
+        <span className="service-label">{customer.service}</span>
       </div>
+      <nav className="customer-tabs" aria-label="Your portal">
+        {["Home", "Visits", "Messages", "History"].map((item) => (
+          <button
+            key={item}
+            aria-current={tab === item ? "page" : undefined}
+            onClick={() => {
+              setTab(item);
+              setSent("");
+            }}
+          >
+            {item}
+          </button>
+        ))}
+      </nav>
+      {tab === "Home" && (
+        <>
+          <div className="portal-summary">
+            <NextCut customer={customer} />
+            <PaymentCard customer={customer} />
+          </div>
+          {weather && (
+            <div className="weather-notice">
+              <Icon name="weather" />
+              <div>
+                <strong>Weather update</strong>
+                <p>{weather}</p>
+              </div>
+            </div>
+          )}
+          <section className="panel contact-card">
+            <div>
+              <span className="eyebrow">LET’S KEEP IN TOUCH</span>
+              <h2>Need to change something?</h2>
+              <p>
+                Leave a note about your lawn or request a change to your next
+                cut.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              icon="message"
+              onClick={() => setTab("Messages")}
+            >
+              Message Jesse
+            </Button>
+          </section>
+        </>
+      )}
+      {tab === "Visits" && (
+        <section className="panel">
+          <SectionHead
+            title="Upcoming visits"
+            detail="Your latest schedule and service updates."
+          />
+          {visits.length ? (
+            visits.map((visit) => (
+              <div className="visit-line" key={visit.id}>
+                <DateBadge date={visit.date} />
+                <div className="grow">
+                  <strong>{visit.date}</strong>
+                  <p>
+                    {visit.time} · {visit.service}
+                  </p>
+                </div>
+                <div className="status-stack">
+                  <Pill>{visit.status}</Pill>
+                  {visit.weather !== "Clear" && <Pill>{visit.weather}</Pill>}
+                </div>
+              </div>
+            ))
+          ) : (
+            <Empty title="No upcoming visits">
+              Your next scheduled cut will appear here.
+            </Empty>
+          )}
+        </section>
+      )}
+      {tab === "Messages" && (
+        <div className="message-layout">
+          <section className="panel">
+            <SectionHead title="Message Jesse" />
+            <div className="segmented">
+              {["Comment", "Request a change"].map((item) => (
+                <button
+                  key={item}
+                  aria-pressed={mode === item}
+                  onClick={() => {
+                    setMode(item);
+                    setSent("");
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+            <form className="form-stack" onSubmit={send}>
+              <fieldset disabled={!writable}>
+                {mode !== "Comment" && (
+                  <Field
+                    label="What do you need?"
+                    options={REQUESTS}
+                    value={request}
+                    onChange={(event) => setRequest(event.target.value)}
+                  />
+                )}
+                <Field
+                  label={
+                    mode === "Comment" ? "Your comment" : "Details (optional)"
+                  }
+                  area
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder="Anything you’d like Jesse to know…"
+                />
+                <Button
+                  type="submit"
+                  icon="arrow"
+                  disabled={mode === "Comment" && !message.trim()}
+                >
+                  Send {mode === "Comment" ? "comment" : "request"}
+                </Button>
+              </fieldset>
+              {sent && (
+                <p className="success" role="status">
+                  {sent}
+                </p>
+              )}
+            </form>
+          </section>
+          <section className="panel">
+            <SectionHead title="Your messages" />
+            {!customer.comments.length && !customer.requests.length && (
+              <Empty title="You’re all up to date">
+                Your comments and requests will appear here.
+              </Empty>
+            )}
+            {[...customer.requests].reverse().map((item, index) => (
+              <div className="message-item" key={`r${index}`}>
+                <div className="section-head">
+                  <strong>{item.type}</strong>
+                  <Pill>{item.status || "New"}</Pill>
+                </div>
+                <p>{item.note}</p>
+              </div>
+            ))}
+            {[...customer.comments].reverse().map((comment, index) => (
+              <div className="message-item" key={`c${index}`}>
+                <span className="eyebrow">YOUR COMMENT</span>
+                <p>{comment}</p>
+              </div>
+            ))}
+          </section>
+        </div>
+      )}
+      {tab === "History" && (
+        <section className="panel">
+          <SectionHead title="Service history" />
+          {customer.history.length ? (
+            [...customer.history].reverse().map((item, index) => (
+              <div className="visit-line" key={index}>
+                <DateBadge date={item.date} />
+                <div className="grow">
+                  <strong>{item.service}</strong>
+                  <p>{item.date}</p>
+                </div>
+                <Pill>{item.status}</Pill>
+              </div>
+            ))
+          ) : (
+            <Empty title="A clean slate">
+              Completed services will appear here.
+            </Empty>
+          )}
+        </section>
+      )}
+      <footer className="portal-footer">
+        <Brand />
+        <span>Thanks for choosing Geottes Lawn Service.</span>
+      </footer>
     </main>
   );
 }
 
-function AddCustomer({ customers, onCreate, onCancel }) {
-  const nextId = customers.length ? Math.max(...customers.map(customer => Number(customer.id) || 0)) + 1 : 1;
+function CustomerForm({ customer, customers, onSave, onClose }) {
+  const creating = !customer;
+  const [form, setForm] = useState(
+    customer
+      ? { ...customer }
+      : {
+          name: "",
+          address: "",
+          code: "",
+          service: "Weekly Mow",
+          balance: "0",
+          notes: "",
+          weatherNotice: "",
+        },
+  );
+  const [firstVisit, setFirstVisit] = useState(false);
+  const [date, setDate] = useState(isoDate(formatDate(new Date())));
+  const [time, setTime] = useState(TIMES[0]);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({
-    name: "",
-    address: "",
-    code: `CUSTOMER${String(nextId).padStart(3, "0")}`,
-    service: "Weekly Mow",
-    balance: "0",
-    status: "Scheduled",
-    weather: "Clear",
-    time: TIMES[0],
-    date: "March 1, 2026",
-    notes: "",
-    weatherNotice: ""
-  });
-
-  const update = (key, value) => {
-    setForm(current => ({ ...current, [key]: key === "code" ? value.toUpperCase() : value }));
-    setError("");
-  };
-
-  const submit = event => {
+  function field(key) {
+    return {
+      value: form[key],
+      onChange: (event) => setForm({ ...form, [key]: event.target.value }),
+    };
+  }
+  function submit(event) {
     event.preventDefault();
-
     const code = form.code.trim().toUpperCase();
-    const amount = Number(form.balance);
-
-    if (!form.name.trim() || !form.address.trim() || !code || !form.service.trim()) {
-      setError("Name, address, code, and service are required.");
-      return;
-    }
-
-    if (code === ADMIN_CODE) {
-      setError("That code is reserved for admin.");
-      return;
-    }
-
-    if (customers.some(customer => customer.code === code)) {
-      setError("Another customer already has that code.");
-      return;
-    }
-
-    if (!Number.isFinite(amount) || amount < 0) {
-      setError("Enter a valid amount due.");
-      return;
-    }
-
-    const balance = Math.round(amount * 100) / 100;
-
-    onCreate(normalizeCustomer({
-      id: nextId,
+    if (
+      !form.name.trim() ||
+      !form.address.trim() ||
+      !code ||
+      !form.service.trim()
+    )
+      return setError("Name, address, service, and portal code are required.");
+    if (
+      code === ADMIN_CODE ||
+      customers.some((item) => item.id !== customer?.id && item.code === code)
+    )
+      return setError(
+        "That portal code is already in use. Choose a different code.",
+      );
+    const next = normalizeCustomer({
+      ...form,
+      code,
       name: form.name.trim(),
       address: form.address.trim(),
-      code,
-      service: form.service.trim(),
-      balance,
-      paid: balance === 0,
-      paymentStatus: balance === 0 ? "Paid" : "Unpaid",
-      paidDate: balance === 0 ? todayText() : "",
-      notes: form.notes,
-      weatherNotice: form.weatherNotice,
-      visits: [makeVisit(1, form.date, form.time, form.service.trim(), form.status, form.weather)]
-    }));
-  };
-
-  return (
-    <main className="page narrow">
-      <div className="top-row">
-        <div>
-          <p className="eyebrow">Add Customer</p>
-          <h2>Create a customer portal</h2>
-          <span>Add their private code, schedule, and payment details.</span>
-        </div>
-        <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-      </div>
-
-      <Card>
-        <form className="form-grid" onSubmit={submit}>
-          <Field label="Customer name" value={form.name} onChange={value => update("name", value)} />
-          <Field label="Portal code" value={form.code} onChange={value => update("code", value)} />
-          <Field label="Address" value={form.address} onChange={value => update("address", value)} />
-          <Field label="Service type" value={form.service} onChange={value => update("service", value)} />
-          <Field label="Amount due" value={form.balance} onChange={value => update("balance", value)} type="number" />
-          <Field label="Status" value={form.status} onChange={value => update("status", value)} options={STATUSES} />
-          <Field label="Weather" value={form.weather} onChange={value => update("weather", value)} options={WEATHER} />
-          <Field label="Time" value={form.time} onChange={value => update("time", value)} options={TIMES} />
-          <CalendarPick value={form.date} onChange={value => update("date", value)} />
-          <Field label="Private notes" value={form.notes} onChange={value => update("notes", value)} area />
-          <Field label="Weather notice" value={form.weatherNotice} onChange={value => update("weatherNotice", value)} area />
-
-          {error && <p className="error full">{error}</p>}
-
-          <Button type="submit">Create Customer</Button>
-        </form>
-      </Card>
-    </main>
-  );
-}
-function CustomerPortal({ customer, onBack, onComment, onRequest }) {
-  const [comment, setComment] = useState("");
-  const [requestType, setRequestType] = useState(REQUESTS[0]);
-  const [requestNote, setRequestNote] = useState("");
-  const current = getNextVisit(customer);
-  const visits = getVisits(customer);
-  const weather = customer.weatherNotice || visits.find(visit => visit.weather !== "Clear")?.weather || "";
-
-  const submitComment = event => {
-    event.preventDefault();
-    if (!comment.trim()) return;
-    onComment(customer.id, comment.trim());
-    setComment("");
-  };
-
-  const submitRequest = event => {
-    event.preventDefault();
-    onRequest(customer.id, { type: requestType, note: requestNote.trim(), status: "New" });
-    setRequestType(REQUESTS[0]);
-    setRequestNote("");
-  };
-
-  return (
-    <main className="page customer-page">
-      <div className="top-row">
-        <div>
-          <p className="eyebrow">Customer Portal</p>
-          <h2>Welcome, {firstName(customer.name)}</h2>
-          <span>{customer.address}</span>
-        </div>
-        <Button variant="secondary" onClick={onBack}>Switch Code</Button>
-      </div>
-
-      <Card className="service-card">
-        <div>
-          <p>Next Cut</p>
-          <h2>{current?.service || customer.service}</h2>
-          <span>{current ? visitText(current) : "No visit scheduled"}</span>
-        </div>
-        <Pill>{current?.status || "Scheduled"}</Pill>
-      </Card>
-
-      <div className="customer-quick-grid">
-        <PaymentPanel customer={customer} />
-        
-      </div>
-
-      <Collapsible title="Upcoming Visits" defaultOpen>
-        <div className="stack">
-          {visits.length ? visits.map(visit => <VisitRow key={visit.id} visit={visit} />) : <p className="empty">No visits scheduled.</p>}
-        </div>
-      </Collapsible>
-
-      <Collapsible title="Send Comment or Request" defaultOpen>
-        <div className="stack">
-          <form onSubmit={submitComment} className="stack">
-            <h3>Comment on this week’s cut</h3>
-            <textarea value={comment} onChange={event => setComment(event.target.value)} placeholder="Example: Please trim closer around the fence next week." />
-            <Button type="submit" disabled={!comment.trim()}>Submit Comment</Button>
-          </form>
-
-          <form onSubmit={submitRequest} className="stack">
-            <h3>Request a change</h3>
-            <Field label="Request type" value={requestType} onChange={setRequestType} options={REQUESTS} />
-            <Field label="Details" value={requestNote} onChange={setRequestNote} area />
-            <Button type="submit">Submit Request</Button>
-          </form>
-        </div>
-      </Collapsible>
-
-      <Collapsible title="Your Comments">
-        <div className="stack">
-          {customer.comments.length ? customer.comments.map((item, index) => <p key={index} className="empty">{item}</p>) : <p className="empty">No comments yet.</p>}
-        </div>
-      </Collapsible>
-
-      <Collapsible title="Service History">
-        <div className="stack">
-          {customer.history.length ? customer.history.map((item, index) => (
-            <p key={index} className="empty">
-              <strong>{item.date}</strong>
-              <br />
-              {item.service} — {item.status}
-            </p>
-          )) : <p className="empty">No completed services yet.</p>}
-        </div>
-      </Collapsible>
-    </main>
-  );
-}
-
-function EmptyAdmin({ onAdd }) {
-  return (
-    <main className="page narrow">
-      <Card className="center">
-        <div className="big-icon">📁</div>
-        <h2>No customers yet</h2>
-        <p>Add your first customer to create their private portal.</p>
-        <Button onClick={onAdd}>Add First Customer</Button>
-      </Card>
-    </main>
-  );
-}
-function AdminDashboard({ customers, setCustomers, selectedId, setSelectedId, onAdd }) {
-  const [search, setSearch] = useState("");
-const [confirm, setConfirm] = useState("");
-const [dismissedAlerts, setDismissedAlerts] = useState({});
-const [draft, setDraft] = useState({
-    date: "March 1, 2026",
-    time: TIMES[0],
-    service: "Weekly Mow",
-    status: "Scheduled",
-    weather: "Clear"
-  });
-
-  const selected = customers.find(customer => customer.id === selectedId) || customers[0];
-    const selectedComments = arr(selected?.comments);
-const selectedRequests = arr(selected?.requests);
-const alertKey = selected ? `${selected.id}-${selectedComments.length}-${selectedRequests.length}` : "";
-const hasPrivateAlert = selected && !dismissedAlerts[alertKey] && (selectedComments.length > 0 || selectedRequests.length > 0);
-
-  const filtered = useMemo(() => {
-    return customers.filter(customer => {
-      const text = `${customer.name} ${customer.address} ${customer.code}`.toLowerCase();
-      return text.includes(search.toLowerCase());
+      id:
+        customer?.id ||
+        Math.max(0, ...customers.map((item) => Number(item.id))) + 1,
     });
-  }, [customers, search]);
-
-  if (!customers.length || !selected) return <EmptyAdmin onAdd={onAdd} />;
-
-  const unpaid = customers.filter(customer => Number(customer.balance) > 0 && customer.paymentStatus !== "Paid");
-  const totalDue = customers.reduce((sum, customer) => sum + Number(customer.balance || 0), 0);
-
-  const save = changes => {
-    setCustomers(current =>
-      current.map(customer =>
-        customer.id === selected.id ? normalizeCustomer({ ...customer, ...changes }) : customer
-      )
-    );
-  };
-
-  const saveVisits = visits => {
-    save({ visits, service: getNextVisit({ visits })?.service || selected.service });
-  };
-
-  const updateVisit = (id, changes) => {
-    const oldVisit = getVisits(selected).find(visit => visit.id === id);
-    const newVisits = getVisits(selected).map(visit =>
-      visit.id === id ? { ...visit, ...changes } : visit
-    );
-    const completed = changes.status === "Completed" && oldVisit?.status !== "Completed";
-    const history = completed
-      ? [
-          {
-            date: oldVisit.date,
-            service: oldVisit.service,
-            status: "Completed",
-            amount: selected.balance,
-            paid: selected.paid
-          }
-        ]
-      : [];
-
-    setCustomers(current =>
-      current.map(customer =>
-        customer.id === selected.id
-          ? normalizeCustomer({
-              ...customer,
-              visits: newVisits,
-              history: [...arr(customer.history), ...history]
-            })
-          : customer
-      )
-    );
-  };
-
-  const addVisit = () => {
-    const id = getVisits(selected).length
-      ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1
-      : 1;
-
-    saveVisits([
-      ...getVisits(selected),
-      makeVisit(id, draft.date, draft.time, draft.service, draft.status, draft.weather)
-    ]);
-  };
-
-  const addRecurring = () => {
-    const id = getVisits(selected).length
-      ? Math.max(...getVisits(selected).map(visit => visit.id)) + 1
-      : 1;
-
-    const added = Array.from({ length: 4 }, (_, index) =>
-      makeVisit(id + index, addWeeks(draft.date, index), draft.time, draft.service)
-    );
-
-    saveVisits([...getVisits(selected), ...added]);
-  };
-
-  const deleteCustomer = () => {
-    if (confirm !== "DELETE") return;
-    const remaining = customers.filter(customer => customer.id !== selected.id);
-    setCustomers(remaining);
-    setSelectedId(remaining[0]?.id || null);
-    setConfirm("");
-  };
-
+    if (creating && firstVisit)
+      next.visits = appendVisits(next, {
+        date: fromISO(date),
+        time,
+        service: next.service,
+      }).visits;
+    onSave(next);
+  }
   return (
-    <main className="page">
-      <div className="top-row">
-        <div>
-          <p className="eyebrow">Admin View</p>
-          <h2>Manage customers</h2>
-          <span>Schedules, payments, comments, requests, and weather.</span>
-        </div>
-        <Button onClick={onAdd}>+ Add Customer</Button>
-      </div>
-
-      <div className="stats">
-        <Card>
-          <p>Active Clients</p>
-          <h2>{customers.length}</h2>
-        </Card>
-        <Card>
-          <p>Total Due</p>
-          <h2>${totalDue}</h2>
-        </Card>
-        <Card className={unpaid.length ? "stat-red" : "stat-green"}>
-          <p>Unpaid Accounts</p>
-          <h2>{unpaid.length}</h2>
-        </Card>
-      </div>
-
-      <div className="admin-layout">
-        <Card className="customer-list">
-          <h3>Customer Folders</h3>
-          <input
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            placeholder="Search customers..."
-          />
-
-          {filtered.map(customer => {
-            const state = paymentState(customer);
-
-            return (
-              <button
-                key={customer.id}
-                onClick={() => setSelectedId(customer.id)}
-                className={`customer-button ${state} ${selected.id === customer.id ? "active" : ""}`}
-              >
-                <strong>{customer.name}</strong>
-                <span>
-                  {state === "paid"
-                    ? "PAID"
-                    : state === "pending"
-                      ? "PENDING"
-                      : `$${customer.balance} DUE`}
-                </span>
-                <small>{customer.address}</small>
-                <small>Code: {customer.code}</small>
-              </button>
-            );
-          })}
-        </Card>
-
-        <div className="stack">
-          <Card>
-            <h2>{selected.name}</h2>
-            <p>{selected.address}</p>
-            <p>
-              <strong>Code:</strong> {selected.code}
-            </p>
-          </Card>
-
-          <Card>
-            <h3>Customer Info</h3>
-            <div className="form-grid">
-              <Field label="Name" value={selected.name} onChange={value => save({ name: value })} />
-              <Field label="Code" value={selected.code} onChange={value => save({ code: value.toUpperCase() })} />
-              <Field label="Address" value={selected.address} onChange={value => save({ address: value })} />
-              <Field label="Private notes" value={selected.notes} onChange={value => save({ notes: value })} area />
-            </div>
-          </Card>
-
-          <Card>
-            <h3>Payment</h3>
-            <div className="form-grid">
-              <Field
-                label="Amount due"
-                value={String(selected.balance)}
-                type="number"
-                onChange={value =>
-                  save({
-                    balance: Math.max(0, Number(value) || 0),
-                    paymentStatus: Number(value) <= 0 ? "Paid" : "Unpaid",
-                    paid: Number(value) <= 0
-                  })
-                }
-              />
-              <Field
-                label="Payment status"
-                value={selected.paymentStatus}
-                onChange={value =>
-                  save({
-                    paymentStatus: value,
-                    paid: value === "Paid",
-                    paidDate: value === "Paid" ? todayText() : selected.paidDate
-                  })
-                }
-                options={["Unpaid", "Pending", "Paid"]}
-              />
-              <Field label="Payment note" value={selected.paymentNote} onChange={value => save({ paymentNote: value })} />
-            </div>
-            <Button onClick={() => save({ balance: 0, paid: true, paymentStatus: "Paid", paidDate: todayText() })}>
-              Mark Paid
-            </Button>
-            <PaymentPanel customer={selected} />
-          </Card>
-
-          <Card>
-            <h3>Weather Notice</h3>
+    <Modal
+      title={creating ? "Add a customer" : "Customer details"}
+      subtitle={customer?.name || "Create their private portal."}
+      onClose={onClose}
+    >
+      <form className="form-stack" onSubmit={submit}>
+        <div className="form-grid">
+          <Field label="Customer name" required {...field("name")} />
+          <Field label="Portal code" required {...field("code")} />
+          <Field label="Address" required {...field("address")} />
+          <Field label="Service" required {...field("service")} />
+          {creating && (
             <Field
-              label="Message customers see"
-              value={selected.weatherNotice}
-              onChange={value => save({ weatherNotice: value })}
-              area
+              label="Starting balance ($)"
+              type="number"
+              min="0"
+              step="0.01"
+              {...field("balance")}
             />
-          </Card>
-
-          <Card>
-            <h3>Add Visits</h3>
-            <div className="form-grid">
-              <Field label="Service" value={draft.service} onChange={value => setDraft(current => ({ ...current, service: value }))} />
-              <Field label="Time" value={draft.time} onChange={value => setDraft(current => ({ ...current, time: value }))} options={TIMES} />
-              <CalendarPick value={draft.date} onChange={value => setDraft(current => ({ ...current, date: value }))} />
-              <Field label="Status" value={draft.status} onChange={value => setDraft(current => ({ ...current, status: value }))} options={STATUSES} />
-              <Field label="Weather" value={draft.weather} onChange={value => setDraft(current => ({ ...current, weather: value }))} options={WEATHER} />
-            </div>
-            <div className="button-row">
-              <Button onClick={addVisit}>Add One-Time Visit</Button>
-              <Button variant="secondary" onClick={addRecurring}>
-                Create 4 Weekly Visits
-              </Button>
-            </div>
-          </Card>
-
-          <Section title="Upcoming Visits">
-            {getVisits(selected).map(visit => (
-              <VisitRow
-                key={visit.id}
-                visit={visit}
-                editable
-                canDelete={getVisits(selected).length > 1}
-                onChange={changes => updateVisit(visit.id, changes)}
-                onDelete={() => saveVisits(getVisits(selected).filter(item => item.id !== visit.id))}
+          )}
+        </div>
+        <Field label="Private owner notes" area {...field("notes")} />
+        {creating && (
+          <>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={firstVisit}
+                onChange={(event) => setFirstVisit(event.target.checked)}
               />
-            ))}
-          </Section>
-
-       <Section title="Comments">
-  {selected.comments.length ? (
-    selected.comments.map((comment, index) => (
-      <div className="comment-admin-item" key={index}>
-        <p>{comment}</p>
+              Schedule their first cut
+            </label>
+            {firstVisit && (
+              <div className="form-grid">
+                <Field
+                  label="Date"
+                  type="date"
+                  required
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                />
+                <Field
+                  label="Arrival window"
+                  options={TIMES}
+                  value={time}
+                  onChange={(event) => setTime(event.target.value)}
+                />
+              </div>
+            )}
+          </>
+        )}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit">
+            {creating ? "Create customer" : "Save details"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function PaymentForm({ customer, onSave, onClose, adjust = false }) {
+  const [amount, setAmount] = useState(String(customer.balance));
+  const [note, setNote] = useState(adjust ? customer.paymentNote : "");
+  const [status, setStatus] = useState(customer.paymentStatus);
+  const [error, setError] = useState("");
+  function submit(event) {
+    event.preventDefault();
+    try {
+      if (adjust) {
+        const balance = Math.round(Number(amount) * 100) / 100;
+        if (!Number.isFinite(balance) || balance < 0)
+          throw new Error("Enter a valid balance.");
+        if (balance > 0 && status === "Paid")
+          throw new Error(
+            "To mark this paid, record the payment or set the balance to zero.",
+          );
+        onSave({
+          ...customer,
+          balance,
+          paid: balance === 0,
+          paymentStatus: balance === 0 ? "Paid" : status,
+          paymentNote: note,
+        });
+      } else onSave(recordPayment(customer, amount, note));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+  return (
+    <Modal
+      title={adjust ? "Manage balance" : "Record a payment"}
+      subtitle={customer.name}
+      onClose={onClose}
+    >
+      <form className="form-stack" onSubmit={submit}>
+        <div className="payment-summary">
+          <span>Current balance</span>
+          <strong>{money(customer.balance)}</strong>
+        </div>
+        <Field
+          label={adjust ? "Balance ($)" : "Amount received ($)"}
+          autoFocus
+          type="number"
+          min={adjust ? "0" : "0.01"}
+          step="0.01"
+          max={adjust ? undefined : customer.balance}
+          required
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+        />
+        {adjust && (
+          <Field
+            label="Payment status"
+            options={["Unpaid", "Pending", "Paid"]}
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+          />
+        )}
+        <Field
+          label={adjust ? "Payment notes" : "Note (optional)"}
+          area
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+        />
+        {!adjust && (
+          <p className="muted">
+            Remaining after payment:{" "}
+            <strong>
+              {money(Math.max(0, Number(customer.balance) - Number(amount)))}
+            </strong>
+          </p>
+        )}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" icon="check">
+            {adjust ? "Save balance" : "Record payment"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function VisitForm({ customer, visit, onSave, onClose }) {
+  const [form, setForm] = useState(
+    visit
+      ? { ...visit }
+      : {
+          date: formatDate(new Date()),
+          time: TIMES[0],
+          service: customer.service,
+          status: "Scheduled",
+          weather: "Clear",
+        },
+  );
+  const [repeat, setRepeat] = useState(false);
+  const [error, setError] = useState("");
+  const field = (key) => ({
+    value: form[key],
+    onChange: (event) => setForm({ ...form, [key]: event.target.value }),
+  });
+  function submit(event) {
+    event.preventDefault();
+    try {
+      const next = visit
+        ? changeVisit(customer, visit.id, form)
+        : appendVisits(customer, form, repeat ? 4 : 1);
+      onSave(next);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+  return (
+    <Modal
+      title={visit ? "Edit cut" : "Schedule a cut"}
+      subtitle={customer.name}
+      onClose={onClose}
+    >
+      <form className="form-stack" onSubmit={submit}>
+        <div className="form-grid">
+          <Field
+            label="Date"
+            type="date"
+            required
+            value={isoDate(form.date)}
+            onChange={(event) =>
+              event.target.value &&
+              setForm({ ...form, date: fromISO(event.target.value) })
+            }
+          />
+          <Field label="Arrival window" options={TIMES} {...field("time")} />
+          <Field label="Service" required {...field("service")} />
+          <Field label="Status" options={STATUSES} {...field("status")} />
+          <Field
+            label="Weather"
+            options={WEATHER}
+            value={form.weather}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                weather: event.target.value,
+                status:
+                  event.target.value === "Rain Delay"
+                    ? "Weather Delay"
+                    : form.status,
+              })
+            }
+          />
+        </div>
+        {!visit && (
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={repeat}
+              onChange={(event) => setRepeat(event.target.checked)}
+            />
+            Repeat weekly for 4 cuts
+          </label>
+        )}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" icon="calendar">
+            {visit ? "Save cut" : repeat ? "Schedule 4 cuts" : "Schedule cut"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function WeatherForm({ customer, onSave, onClose }) {
+  const [text, setText] = useState(customer.weatherNotice);
+  return (
+    <Modal
+      title="Weather notice"
+      subtitle={`Visible to ${customer.name}`}
+      onClose={onClose}
+    >
+      <form
+        className="form-stack"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave({ ...customer, weatherNotice: text });
+        }}
+      >
+        <Field
+          label="Customer message"
+          area
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder="Rain is moving this week’s cut to tomorrow."
+        />
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit">Save notice</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function DeleteForm({ customer, item, onDelete, onClose }) {
+  const [typed, setTyped] = useState("");
+  return (
+    <Modal
+      title={`Delete ${item?.label || "customer"}?`}
+      subtitle={customer.name}
+      onClose={onClose}
+    >
+      <p>
+        {item
+          ? "This item will be removed permanently."
+          : "This removes the customer’s portal, schedule, messages, and history permanently."}
+      </p>
+      {!item && (
+        <Field
+          label="Type DELETE to confirm"
+          value={typed}
+          onChange={(event) => setTyped(event.target.value)}
+        />
+      )}
+      <div className="modal-actions">
+        <Button variant="secondary" onClick={onClose}>
+          Keep {item?.label || "customer"}
+        </Button>
         <Button
           variant="danger"
-          onClick={() =>
-            save({
-              comments: selected.comments.filter((_, commentIndex) => commentIndex !== index)
-            })
-          }
+          disabled={!item && typed !== "DELETE"}
+          onClick={onDelete}
         >
-          Delete Comment
+          Delete {item?.label || "customer"}
         </Button>
       </div>
-    ))
-  ) : (
-    <p className="empty">No comments yet.</p>
-  )}
-</Section>
-
-          <Section title="Requests">
-            {selected.requests.length ? (
-              selected.requests.map((request, index) => (
-                <p className="empty" key={index}>
-                  <strong>{request.type}</strong>
-                  {request.note ? ` — ${request.note}` : ""}
-                </p>
-              ))
-            ) : (
-              <p className="empty">No requests yet.</p>
-            )}
-          </Section>
-
-          <Card className="danger">
-            <h3>Danger Zone</h3>
-            <p>Type DELETE before deleting this customer.</p>
-            <input
-              value={confirm}
-              onChange={event => setConfirm(event.target.value)}
-              placeholder="Type DELETE"
-            />
-            <Button variant="danger" disabled={confirm !== "DELETE"} onClick={deleteCustomer}>
-              Delete Customer
-            </Button>
-          </Card>
-        </div>
-      </div>
-    </main>
+    </Modal>
   );
 }
-export default function App() {
-  const [customers, setCustomers] = useState(() => loadCustomers());
-  const [page, setPage] = useState("home");
+
+function Owner({ customers, update, create, remove, writable }) {
+  const [view, setView] = useState("Overview");
   const [selectedId, setSelectedId] = useState(null);
-  const [portalId, setPortalId] = useState(null);
-  const [cloudReady, setCloudReady] = useState(false);
-  const [syncStatus, setSyncStatus] = useState("Loading cloud");
-  const [lastSynced, setLastSynced] = useState("");
-
-  useEffect(() => {
-    let active = true;
-
-    setSyncStatus("Loading cloud");
-
-    loadCloudCustomers().then(data => {
-      if (!active) return;
-
-      if (Array.isArray(data)) {
-        setCustomers(data);
-        setSyncStatus("Synced");
-        setLastSynced(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-      } else {
-        setSyncStatus("Cloud ready");
-      }
-
-      setCloudReady(true);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    saveCustomers(customers);
-
-    if (cloudReady) {
-      setSyncStatus("Saving...");
-
-      saveCloudCustomers(customers).then(ok => {
-        if (ok) {
-          setSyncStatus("Synced");
-          setLastSynced(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-        } else {
-          setSyncStatus("Sync error");
-        }
-      });
-    }
-  }, [customers, cloudReady]);
-
-  const createCustomer = customer => {
-    const item = normalizeCustomer(customer);
-    setCustomers(current => [...current, item]);
-    setSelectedId(item.id);
-    setPage("admin");
-  };
-
-  const updateCustomer = (id, changes) => {
-    setCustomers(current =>
-      current.map(customer =>
-        customer.id === id ? normalizeCustomer({ ...customer, ...changes }) : customer
-      )
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("All");
+  const [detailTab, setDetailTab] = useState("Schedule");
+  const [modal, setModal] = useState(null);
+  const [notice, setNotice] = useState("");
+  const selected = customers.find((item) => item.id === selectedId);
+  const modalCustomer = customers.find((item) => item.id === modal?.customerId);
+  const due = customers.filter((item) => Number(item.balance) > 0);
+  const totalDue = due.reduce((sum, item) => sum + Number(item.balance), 0);
+  const scheduled = customers
+    .flatMap((customer) =>
+      getVisits(customer)
+        .filter((visit) => visit.status !== "Completed")
+        .map((visit) => ({ customer, visit })),
+    )
+    .sort((a, b) => dateObject(a.visit.date) - dateObject(b.visit.date));
+  const openRequests = customers
+    .flatMap((customer) =>
+      arr(customer.requests).map((request, index) => ({
+        customer,
+        request,
+        index,
+      })),
+    )
+    .filter(({ request }) => request.status !== "Handled");
+  const today = formatDate(new Date());
+  const todayCuts = scheduled.filter(({ visit }) => visit.date === today);
+  const filtered = customers.filter(
+    (customer) =>
+      `${customer.name} ${customer.address} ${customer.code}`
+        .toLowerCase()
+        .includes(search.toLowerCase()) &&
+      (filter !== "Balance due" || Number(customer.balance) > 0),
+  );
+  function pick(customer) {
+    setSelectedId(customer.id);
+    setDetailTab("Schedule");
+    setView("Customers");
+    setNotice("");
+  }
+  function open(type, customer, extra = {}) {
+    if (writable) setModal({ type, customerId: customer?.id, ...extra });
+  }
+  function save(customer) {
+    update(customer.id, () => customer);
+    setModal(null);
+    setNotice("Change added. Check the save status above.");
+  }
+  function complete(customer, visit) {
+    update(customer.id, (current) =>
+      changeVisit(current, visit.id, { status: "Completed" }),
     );
-  };
-
-  const addComment = (id, comment) => {
-    const customer = customers.find(item => item.id === id);
-    updateCustomer(id, { comments: [...arr(customer?.comments), comment] });
-  };
-
-  const addRequest = (id, request) => {
-    const customer = customers.find(item => item.id === id);
-    updateCustomer(id, { requests: [...arr(customer?.requests), request] });
-  };
-
-  const portalCustomer = customers.find(customer => customer.id === portalId);
-
-  const signOut = () => {
-    setPage("home");
-    setPortalId(null);
-  };
-
+    setNotice(`Cut completed for ${firstName(customer.name)}.`);
+  }
+  function nextWeek(customer) {
+    const latest = [...getVisits(customer)].sort(
+      (a, b) => dateObject(b.date) - dateObject(a.date),
+    )[0];
+    const draft = {
+      date: addWeeks(latest?.date || today, 1),
+      time: latest?.time || TIMES[0],
+      service: latest?.service || customer.service,
+    };
+    try {
+      const next = appendVisits(customer, draft);
+      update(customer.id, () => next);
+      setNotice(`Next cut scheduled for ${draft.date}.`);
+    } catch (err) {
+      setNotice(err.message);
+    }
+  }
+  function routeRows(rows) {
+    return rows.map(({ customer, visit }) => (
+      <div className="route-row" key={`${customer.id}-${visit.id}`}>
+        <DateBadge date={visit.date} />
+        <button className="row-link grow" onClick={() => pick(customer)}>
+          <strong>{customer.name}</strong>
+          <span>{customer.address}</span>
+          <small>
+            {visit.date} · {visit.time}
+          </small>
+        </button>
+        <Pill>{visit.status}</Pill>
+        <Button
+          variant="secondary"
+          icon="check"
+          disabled={!writable}
+          onClick={() => complete(customer, visit)}
+        >
+          Complete cut
+        </Button>
+        <button
+          className="icon-button"
+          aria-label={`Edit cut for ${customer.name}`}
+          disabled={!writable}
+          onClick={() => open("visit", customer, { visit })}
+        >
+          <Icon name="chevron" />
+        </button>
+      </div>
+    ));
+  }
   return (
-    <div>
-      <Header
-        onSignOut={signOut}
-        syncStatus={syncStatus}
-        lastSynced={lastSynced}
-      />
-
-      {page === "home" && (
-        <Login
+    <div className="owner-layout">
+      <aside className="sidebar">
+        <div className="workspace-label">YOUR WORKSPACE</div>
+        <nav aria-label="Owner navigation">
+          {[
+            ["Overview", "grid"],
+            ["Customers", "users"],
+            ["Schedule", "calendar"],
+            ["Messages", "message"],
+          ].map(([label, icon]) => (
+            <button
+              key={label}
+              aria-current={view === label ? "page" : undefined}
+              onClick={() => {
+                setView(label);
+                setNotice("");
+              }}
+            >
+              <Icon name={icon} />
+              <span>{label}</span>
+              {label === "Messages" && openRequests.length > 0 && (
+                <b>{openRequests.length}</b>
+              )}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="owner-avatar">JG</div>
+          <div>
+            <strong>Jesse Geottes</strong>
+            <span>Owner workspace</span>
+          </div>
+        </div>
+      </aside>
+      <main className="owner-main">
+        <div className="page-title">
+          <div>
+            <span className="eyebrow">
+              {new Date()
+                .toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })
+                .toUpperCase()}
+            </span>
+            <h1>
+              {view === "Overview" ? "Let’s get growing." : view}
+              <span className="title-dot">
+                {view === "Overview" ? "" : "."}
+              </span>
+            </h1>
+            <p>
+              {view === "Overview"
+                ? "A clear view of your day. A few clicks to keep it moving."
+                : view === "Customers"
+                  ? "Everything for each customer, together."
+                  : view === "Schedule"
+                    ? "Every upcoming cut, in date order."
+                    : "Keep up with customer notes and requests."}
+            </p>
+          </div>
+          <Button
+            icon="plus"
+            disabled={!writable}
+            onClick={() => open("create")}
+          >
+            Add customer
+          </Button>
+        </div>
+        {notice && (
+          <div className="notice" role="status">
+            <Icon name="check" />
+            {notice}
+            <button
+              className="icon-button"
+              aria-label="Dismiss message"
+              onClick={() => setNotice("")}
+            >
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+        )}
+        {view === "Overview" && (
+          <>
+            <div className="stats">
+              <button
+                className="stat stat-feature"
+                onClick={() => setView("Schedule")}
+              >
+                <span>
+                  <Icon name="calendar" />
+                  Cuts today
+                </span>
+                <strong>
+                  {todayCuts.length}
+                  <small>scheduled</small>
+                </strong>
+                <div>
+                  View your schedule <Icon name="arrow" />
+                </div>
+              </button>
+              <button
+                className="stat"
+                onClick={() => {
+                  setFilter("Balance due");
+                  setSelectedId(null);
+                  setView("Customers");
+                }}
+              >
+                <span>
+                  <Icon name="wallet" />
+                  Outstanding balance
+                </span>
+                <strong>{money(totalDue)}</strong>
+                <div>
+                  {due.length} {due.length === 1 ? "customer" : "customers"}{" "}
+                  with a balance <Icon name="arrow" />
+                </div>
+              </button>
+              <button className="stat" onClick={() => setView("Messages")}>
+                <span>
+                  <Icon name="message" />
+                  Open requests
+                </span>
+                <strong>
+                  {openRequests.length}
+                  <small>to review</small>
+                </strong>
+                <div>
+                  Go to messages <Icon name="arrow" />
+                </div>
+              </button>
+            </div>
+            <div className="overview-columns">
+              <section className="panel">
+                <SectionHead
+                  title={
+                    todayCuts.length ? "Today’s cuts" : "Next on the schedule"
+                  }
+                  detail={
+                    todayCuts.length
+                      ? "Finish a cut right from here."
+                      : "Your earliest scheduled work."
+                  }
+                >
+                  <button
+                    className="text-button"
+                    onClick={() => setView("Schedule")}
+                  >
+                    View all <Icon name="arrow" size={16} />
+                  </button>
+                </SectionHead>
+                {scheduled.length ? (
+                  routeRows(
+                    (todayCuts.length ? todayCuts : scheduled).slice(0, 5),
+                  )
+                ) : (
+                  <Empty title="Your schedule is clear">
+                    Open a customer to schedule their next cut.
+                  </Empty>
+                )}
+              </section>
+              <section className="panel balances-panel">
+                <SectionHead title="Balances to collect" />
+                <div>
+                  {due.length ? (
+                    due.slice(0, 5).map((customer) => (
+                      <div className="balance-row" key={customer.id}>
+                        <button
+                          className="row-link"
+                          onClick={() => pick(customer)}
+                        >
+                          <strong>{customer.name}</strong>
+                          <span>{money(customer.balance)}</span>
+                        </button>
+                        <Button
+                          variant="secondary"
+                          disabled={!writable}
+                          onClick={() => open("payment", customer)}
+                        >
+                          Record payment
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <Empty title="All caught up">
+                      No customer balances are outstanding.
+                    </Empty>
+                  )}
+                </div>
+              </section>
+            </div>
+          </>
+        )}
+        {view === "Schedule" && (
+          <section className="panel">
+            <SectionHead
+              title="Upcoming cuts"
+              detail={`${scheduled.length} scheduled across ${customers.length} customers`}
+            />
+            {scheduled.length ? (
+              routeRows(scheduled)
+            ) : (
+              <Empty title="No cuts scheduled">
+                Choose a customer to add a cut.
+              </Empty>
+            )}
+          </section>
+        )}
+        {view === "Customers" && (
+          <div className={`customers-layout ${selected ? "has-selected" : ""}`}>
+            <section className="panel customer-directory">
+              <div className="search-field">
+                <Icon name="search" />
+                <input
+                  aria-label="Search customers"
+                  placeholder="Name, address, or code"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+              <div className="segmented">
+                {["All", "Balance due"].map((item) => (
+                  <button
+                    key={item}
+                    aria-pressed={filter === item}
+                    onClick={() => setFilter(item)}
+                  >
+                    {item}
+                    {item === "All"
+                      ? ` · ${customers.length}`
+                      : ` · ${due.length}`}
+                  </button>
+                ))}
+              </div>
+              <div className="directory-list">
+                {filtered.map((customer) => (
+                  <button
+                    className={`customer-row ${selectedId === customer.id ? "selected" : ""}`}
+                    aria-label={`${customer.name}, ${customer.address}, ${money(customer.balance)} balance`}
+                    key={customer.id}
+                    onClick={() => pick(customer)}
+                  >
+                    <span className="avatar">
+                      {customer.name
+                        .split(" ")
+                        .map((s) => s[0])
+                        .slice(0, 2)
+                        .join("")}
+                    </span>
+                    <span className="customer-row-text">
+                      <strong>{customer.name}</strong>
+                      <small>{customer.address}</small>
+                    </span>
+                    <span
+                      className={`customer-balance ${Number(customer.balance) > 0 ? "due" : ""}`}
+                    >
+                      {Number(customer.balance) > 0
+                        ? money(customer.balance)
+                        : "Paid"}
+                    </span>
+                  </button>
+                ))}
+                {!filtered.length && (
+                  <Empty title="No matching customers">
+                    {customers.length
+                      ? "Try another name or clear the filter."
+                      : "Add your first customer to get started."}
+                  </Empty>
+                )}
+              </div>
+            </section>
+            <section className="customer-detail">
+              {selected ? (
+                <>
+                  <button
+                    className="text-button mobile-back"
+                    onClick={() => setSelectedId(null)}
+                  >
+                    ← All customers
+                  </button>
+                  <div className="detail-heading">
+                    <div>
+                      <span className="eyebrow">CUSTOMER DETAILS</span>
+                      <h2>{selected.name}</h2>
+                      <p>{selected.address}</p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      disabled={!writable}
+                      onClick={() => open("edit", selected)}
+                    >
+                      Edit details
+                    </Button>
+                  </div>
+                  <div className="detail-summary">
+                    <div>
+                      <span>Balance due</span>
+                      <strong>{money(selected.balance)}</strong>
+                      <Pill>{selected.paymentStatus}</Pill>
+                    </div>
+                    <div>
+                      <span>Next cut</span>
+                      <strong className="next-date">
+                        {getNextVisit(selected)?.date || "Not scheduled"}
+                      </strong>
+                      <small>
+                        {getNextVisit(selected)?.time || selected.service}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="quick-actions">
+                    <Button
+                      icon="wallet"
+                      disabled={!writable || Number(selected.balance) <= 0}
+                      onClick={() => open("payment", selected)}
+                    >
+                      Record payment
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      icon="plus"
+                      disabled={!writable}
+                      onClick={() => open("visit", selected)}
+                    >
+                      New cut
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      icon="calendar"
+                      disabled={!writable}
+                      onClick={() => nextWeek(selected)}
+                    >
+                      Next cut +7 days
+                    </Button>
+                  </div>
+                  <nav className="detail-tabs" aria-label="Customer details">
+                    {["Schedule", "Messages", "Account"].map((item) => (
+                      <button
+                        key={item}
+                        aria-current={detailTab === item ? "page" : undefined}
+                        onClick={() => setDetailTab(item)}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </nav>
+                  {detailTab === "Schedule" && (
+                    <div className="panel">
+                      <SectionHead title="Visits" />
+                      <div className="detail-visits">
+                        {[...getVisits(selected)]
+                          .sort(
+                            (a, b) => dateObject(a.date) - dateObject(b.date),
+                          )
+                          .map((visit) => (
+                            <div className="detail-visit" key={visit.id}>
+                              <div className="visit-line">
+                                <DateBadge date={visit.date} />
+                                <div className="grow">
+                                  <strong>{visit.date}</strong>
+                                  <p>
+                                    {visit.time}
+                                    <br />
+                                    {visit.service}
+                                  </p>
+                                </div>
+                                <Pill>{visit.status}</Pill>
+                              </div>
+                              <div className="visit-actions">
+                                {visit.status !== "Completed" && (
+                                  <Button
+                                    variant="secondary"
+                                    icon="check"
+                                    disabled={!writable}
+                                    onClick={() => complete(selected, visit)}
+                                  >
+                                    Complete cut
+                                  </Button>
+                                )}
+                                <button
+                                  className="text-button"
+                                  disabled={!writable}
+                                  onClick={() =>
+                                    open("visit", selected, { visit })
+                                  }
+                                >
+                                  Edit cut
+                                </button>
+                                <button
+                                  className="text-button danger-text"
+                                  disabled={!writable}
+                                  onClick={() =>
+                                    open("delete", selected, {
+                                      item: { label: "cut", visitId: visit.id },
+                                    })
+                                  }
+                                >
+                                  Delete
+                                </button>
+                                {visit.weather !== "Clear" && (
+                                  <Pill>{visit.weather}</Pill>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        {!getVisits(selected).length && (
+                          <Empty title="No visits yet">
+                            Use New cut to schedule a visit.
+                          </Empty>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {detailTab === "Messages" && (
+                    <div className="panel">
+                      <SectionHead title="Comments & requests" />
+                      {renderMessages(selected)}
+                    </div>
+                  )}
+                  {detailTab === "Account" && (
+                    <div className="panel account-details">
+                      <SectionHead title="Account & settings" />
+                      <div className="account-row">
+                        <div>
+                          <span>Portal code</span>
+                          <strong className="portal-code">
+                            {selected.code}
+                          </strong>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          disabled={!writable}
+                          onClick={() => open("edit", selected)}
+                        >
+                          Edit details
+                        </Button>
+                      </div>
+                      <div className="account-row">
+                        <div>
+                          <span>Payment</span>
+                          <strong>
+                            {money(selected.balance)} · {selected.paymentStatus}
+                          </strong>
+                          {selected.paidDate && (
+                            <p>Last paid: {selected.paidDate}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="secondary"
+                          disabled={!writable}
+                          onClick={() => open("adjust", selected)}
+                        >
+                          Manage balance
+                        </Button>
+                      </div>
+                      {selected.paymentNote && (
+                        <p className="preserve-lines muted">
+                          {selected.paymentNote}
+                        </p>
+                      )}
+                      <div className="account-row">
+                        <div>
+                          <span>Weather notice</span>
+                          <p>{selected.weatherNotice || "No active notice"}</p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          icon="weather"
+                          disabled={!writable}
+                          onClick={() => open("weather", selected)}
+                        >
+                          Edit notice
+                        </Button>
+                      </div>
+                      <div className="account-notes">
+                        <span className="eyebrow">PRIVATE OWNER NOTES</span>
+                        <p className="preserve-lines">
+                          {selected.notes || "No private notes yet."}
+                        </p>
+                      </div>
+                      <details className="history-details">
+                        <summary>
+                          Service history ({selected.history.length})
+                        </summary>
+                        {selected.history.map((item, index) => (
+                          <div className="message-item" key={index}>
+                            <strong>{item.date}</strong>
+                            <p>
+                              {item.service} · {item.status}
+                            </p>
+                          </div>
+                        ))}
+                      </details>
+                      <div className="danger-zone">
+                        <span>Remove this customer and their portal</span>
+                        <button
+                          className="text-button danger-text"
+                          disabled={!writable}
+                          onClick={() => open("delete", selected)}
+                        >
+                          Delete customer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="panel select-customer">
+                  <Icon name="users" size={34} />
+                  <h2>Choose a customer</h2>
+                  <p>
+                    Schedule cuts, record payments, and manage their portal.
+                  </p>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+        {view === "Messages" && (
+          <div className="inbox">
+            {customers
+              .filter(
+                (customer) =>
+                  customer.comments.length || customer.requests.length,
+              )
+              .map((customer) => (
+                <section className="panel" key={customer.id}>
+                  <SectionHead title={customer.name} detail={customer.address}>
+                    <button
+                      className="text-button"
+                      onClick={() => pick(customer)}
+                    >
+                      Customer <Icon name="arrow" size={16} />
+                    </button>
+                  </SectionHead>
+                  {renderMessages(customer)}
+                </section>
+              ))}
+            {!customers.some(
+              (customer) =>
+                customer.comments.length || customer.requests.length,
+            ) && (
+              <section className="panel">
+                <Empty title="No messages yet">
+                  Customer comments and requests will appear here.
+                </Empty>
+              </section>
+            )}
+          </div>
+        )}
+        <footer className="owner-footer">
+          Geottes Lawn Service{" "}
+          <span>
+            {customers.length} customer portals · {scheduled.length} upcoming
+            cuts
+          </span>
+        </footer>
+      </main>
+      {modal?.type === "create" && (
+        <CustomerForm
           customers={customers}
-          onAdmin={() => setPage("admin")}
-          onCustomer={id => {
-            setPortalId(id);
-            setPage("customer");
+          onSave={(customer) => {
+            create(customer);
+            setModal(null);
+            pick(customer);
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modalCustomer && modal?.type === "edit" && (
+        <CustomerForm
+          customer={modalCustomer}
+          customers={customers}
+          onSave={save}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modalCustomer && ["payment", "adjust"].includes(modal?.type) && (
+        <PaymentForm
+          customer={modalCustomer}
+          adjust={modal.type === "adjust"}
+          onSave={save}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modalCustomer && modal?.type === "visit" && (
+        <VisitForm
+          customer={modalCustomer}
+          visit={modal.visit}
+          onSave={save}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modalCustomer && modal?.type === "weather" && (
+        <WeatherForm
+          customer={modalCustomer}
+          onSave={save}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modalCustomer && modal?.type === "delete" && (
+        <DeleteForm
+          customer={modalCustomer}
+          item={modal.item}
+          onClose={() => setModal(null)}
+          onDelete={() => {
+            if (modal.item?.visitId !== undefined)
+              update(modalCustomer.id, (current) => ({
+                ...current,
+                visits: getVisits(current).filter(
+                  (visit) => visit.id !== modal.item.visitId,
+                ),
+              }));
+            else if (modal.item?.commentIndex !== undefined)
+              update(modalCustomer.id, (current) => ({
+                ...current,
+                comments: current.comments.filter(
+                  (_, index) => index !== modal.item.commentIndex,
+                ),
+              }));
+            else {
+              remove(modalCustomer.id);
+              setSelectedId(null);
+            }
+            setModal(null);
           }}
         />
       )}
-
-      {page === "add" && (
-        <AddCustomer
-          customers={customers}
-          onCreate={createCustomer}
-          onCancel={() => setPage("admin")}
-        />
-      )}
-
-      {page === "admin" && (
-        <AdminDashboard
-          customers={customers}
-          setCustomers={setCustomers}
-          selectedId={selectedId}
-          setSelectedId={setSelectedId}
-          onAdd={() => setPage("add")}
-        />
-      )}
-
-      {page === "customer" && (
-        portalCustomer ? (
-          <CustomerPortal
-            customer={portalCustomer}
-            onBack={signOut}
-            onComment={addComment}
-            onRequest={addRequest}
-          />
-        ) : (
-          <Login
-            customers={customers}
-            onAdmin={() => setPage("admin")}
-            onCustomer={id => {
-              setPortalId(id);
-              setPage("customer");
-            }}
-          />
-        )
-      )}
     </div>
+  );
+  function renderMessages(customer) {
+    return (
+      <>
+        {!customer.comments.length && !customer.requests.length && (
+          <Empty title="No messages yet" />
+        )}
+        {customer.requests.map((request, index) => (
+          <div className="message-item" key={`request${index}`}>
+            <div className="section-head">
+              <strong>{request.type}</strong>
+              <Pill>{request.status || "New"}</Pill>
+            </div>
+            {request.note && <p>{request.note}</p>}
+            <button
+              className="text-button"
+              disabled={!writable}
+              onClick={() =>
+                update(customer.id, (current) => ({
+                  ...current,
+                  requests: current.requests.map((item, i) =>
+                    i === index
+                      ? {
+                          ...item,
+                          status: item.status === "Handled" ? "New" : "Handled",
+                        }
+                      : item,
+                  ),
+                }))
+              }
+            >
+              {request.status === "Handled" ? "Reopen request" : "Mark handled"}
+            </button>
+          </div>
+        ))}
+        {customer.comments.map((comment, index) => (
+          <div className="message-item" key={`comment${index}`}>
+            <span className="eyebrow">COMMENT</span>
+            <p className="preserve-lines">{comment}</p>
+            <button
+              className="text-button danger-text"
+              disabled={!writable}
+              onClick={() =>
+                open("delete", customer, {
+                  item: { label: "comment", commentIndex: index },
+                })
+              }
+            >
+              Delete comment
+            </button>
+          </div>
+        ))}
+      </>
+    );
+  }
+}
+
+export default function App() {
+  const [customers, setCustomers] = useState([]);
+  const [session, setSession] = useState(null);
+  const [ready, setReady] = useState(false);
+  const [sync, setSync] = useState("Connecting");
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const current = useRef([]);
+  const pending = useRef(null);
+  const saving = useRef(false);
+  const blocked = useRef(true);
+  useEffect(() => {
+    let active = true;
+    setReady(false);
+    setLoadError(false);
+    blocked.current = true;
+    loadCloudCustomers().then((data) => {
+      if (!active) return;
+      if (!data) {
+        setLoadError(true);
+        setSync("Connection unavailable");
+        return;
+      }
+      current.current = data;
+      setCustomers(data);
+      try {
+        saveCustomers(data);
+      } catch {}
+      setReady(true);
+      blocked.current = false;
+      setSync("All changes saved");
+    });
+    return () => {
+      active = false;
+    };
+  }, [retry]);
+  useEffect(() => {
+    const warn = (event) => {
+      if (pending.current || saving.current || sync === "Save failed") {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [sync]);
+  async function flush() {
+    if (saving.current || blocked.current) return;
+    saving.current = true;
+    while (pending.current) {
+      const next = pending.current;
+      pending.current = null;
+      setSync("Saving changes…");
+      let ok = false;
+      try {
+        ok = await saveCloudCustomers(next);
+      } catch {}
+      if (!ok) {
+        blocked.current = true;
+        pending.current = current.current;
+        setSync("Save failed");
+        break;
+      }
+      if (!pending.current) setSync("All changes saved");
+    }
+    saving.current = false;
+  }
+  function commit(transform) {
+    if (blocked.current) return;
+    const next = transform(current.current).map(normalizeCustomer);
+    current.current = next;
+    setCustomers(next);
+    try {
+      saveCustomers(next);
+    } catch {}
+    pending.current = next;
+    void flush();
+  }
+  function update(id, transform) {
+    commit((items) =>
+      items.map((item) => (item.id === id ? transform(item) : item)),
+    );
+  }
+  const writable = ready && sync !== "Save failed";
+  const customer = customers.find((item) => item.id === session);
+  const owner = session === "owner";
+  if (session === null)
+    return (
+      <Login
+        customers={customers}
+        ready={ready}
+        error={loadError}
+        onLogin={setSession}
+        onRetry={() => setRetry((value) => value + 1)}
+      />
+    );
+  return (
+    <>
+      <header className="app-header">
+        <Brand />
+        <div className="header-right">
+          <span
+            className={`sync ${sync === "Save failed" ? "failed" : ""}`}
+            role="status"
+          >
+            <i />
+            {sync}
+          </span>
+          <span className="role-label">{owner ? "OWNER" : "CUSTOMER"}</span>
+          <button
+            className="icon-button"
+            aria-label="Sign out"
+            onClick={() => setSession(null)}
+          >
+            <Icon name="logout" />
+          </button>
+        </div>
+      </header>
+      {sync === "Save failed" && (
+        <div className="save-error" role="alert">
+          Your last change hasn’t saved. Another device may have updated the
+          account, or the connection was interrupted. Keep this page open and
+          reload the latest records before making more changes.{" "}
+          <button
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Reload the latest saved records? Unsaved changes on this page will be discarded.",
+                )
+              ) {
+                pending.current = null;
+                setRetry((value) => value + 1);
+              }
+            }}
+          >
+            Reload saved records
+          </button>
+        </div>
+      )}
+      {owner ? (
+        <Owner
+          customers={customers}
+          update={update}
+          create={(item) => commit((items) => [...items, item])}
+          remove={(id) =>
+            commit((items) => items.filter((item) => item.id !== id))
+          }
+          writable={writable}
+        />
+      ) : customer ? (
+        <CustomerPortal
+          customer={customer}
+          update={update}
+          writable={writable}
+        />
+      ) : (
+        <main className="customer-page">
+          <Empty title="Portal unavailable">
+            Sign out and enter your code again.
+          </Empty>
+        </main>
+      )}
+    </>
   );
 }
