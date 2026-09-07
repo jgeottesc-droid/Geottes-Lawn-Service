@@ -79,15 +79,37 @@ function mockCloud({ failLoad = false, failSave = false } = {}) {
 async function login(code) {
   const user = userEvent.setup();
   await waitFor(() =>
+    assert.ok(screen.getByRole("button", { name: "Open my portal" })),
+  );
+  await user.type(screen.getByLabelText("Portal code"), code);
+  await waitFor(() =>
     assert.equal(
       screen.getByRole("button", { name: "Open my portal" }).disabled,
       false,
     ),
   );
-  await user.type(screen.getByLabelText("Portal code"), code);
   await user.click(screen.getByRole("button", { name: "Open my portal" }));
   return user;
 }
+
+test("owner can schedule the next cut from the main dashboard", async () => {
+  const cloud = mockCloud();
+  render(<App />);
+  const user = await login(ADMIN_CODE);
+  await user.click(
+    screen.getAllByRole("button", { name: "Schedule a cut" })[0],
+  );
+  const dialog = screen.getByRole("dialog", { name: "Schedule a cut" });
+  assert.equal(within(dialog).getByLabelText("Customer").value, "10");
+  assert.equal(within(dialog).getByLabelText("Service").value, "Weekly Mow");
+  assert.equal(within(dialog).getByLabelText("Date").value, "2026-09-17");
+  await user.click(
+    within(dialog).getByRole("button", { name: "Schedule cut" }),
+  );
+  await waitFor(() => assert.equal(cloud.data[0].visits.length, 2));
+  assert.equal(cloud.data[0].visits[1].date, "September 17, 2026");
+  assert.equal(cloud.data[0].code, "DEMO10");
+});
 
 test("owner customer details, quick scheduling, and request handling work", async () => {
   const cloud = mockCloud();
