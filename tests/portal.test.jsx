@@ -107,11 +107,23 @@ test("calendar moves a cut to a new day and time and preserves customer records"
   );
   await user.click(
     within(calendar).getByRole("button", {
-      name: "Move selected cut to September 11, 2026, 1:00–3:00 PM",
+      name: "Move selected cut to September 11, 2026",
     }),
   );
   await waitFor(() =>
     assert.equal(cloud.data[0].visits[0].date, "September 11, 2026"),
+  );
+  await user.click(
+    within(calendar).getByRole("button", {
+      name: "Move Demo Customer, September 11, 2026, 8:00–10:00 AM",
+    }),
+  );
+  await user.selectOptions(
+    within(calendar).getByLabelText("Move to arrival window"),
+    "1:00–3:00 PM",
+  );
+  await waitFor(() =>
+    assert.equal(cloud.data[0].visits[0].time, "1:00–3:00 PM"),
   );
   assert.equal(cloud.data[0].visits[0].time, "1:00–3:00 PM");
   assert.equal(cloud.data[0].code, "DEMO10");
@@ -126,6 +138,29 @@ test("calendar moves a cut to a new day and time and preserves customer records"
     }),
   );
   assert.ok(screen.getByRole("dialog", { name: "Edit cut" }));
+});
+
+test("calendar schedules a customer in two clicks on the chosen day", async () => {
+  const cloud = mockCloud();
+  render(<App />);
+  const user = await login(ADMIN_CODE);
+  await user.click(
+    screen.getByRole("button", { name: "Schedule", exact: true }),
+  );
+  const calendar = screen.getByRole("region", { name: "Cut calendar" });
+  await user.click(
+    within(calendar).getByRole("button", {
+      name: "Schedule on September 18, 2026",
+    }),
+  );
+  await user.click(
+    within(calendar).getByRole("button", {
+      name: "Schedule Demo Customer on September 18, 2026",
+    }),
+  );
+  await waitFor(() => assert.equal(cloud.data[0].visits.length, 2));
+  assert.equal(cloud.data[0].visits[1].date, "September 18, 2026");
+  assert.equal(cloud.data[0].code, "DEMO10");
 });
 
 test("owner can schedule the next cut from the main dashboard", async () => {
