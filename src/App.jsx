@@ -1258,138 +1258,113 @@ function DeleteForm({ customer, item, onDelete, onClose }) {
   );
 }
 
-function ScheduleCalendar({ rows, writable, onMove, onEdit }) {
+function ScheduleCalendar({
+  rows,
+  customers,
+  writable,
+  onMove,
+  onEdit,
+  onAdd,
+  onComplete,
+}) {
   const [anchor, setAnchor] = useState(() => new Date());
-  const [mode, setMode] = useState("Week");
+  const [mode, setMode] = useState("Month");
+  const [day, setDay] = useState(() => formatDate(new Date()));
   const [moving, setMoving] = useState(null);
+  const [arrival, setArrival] = useState(TIMES[0]);
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [adding, setAdding] = useState(false);
+  const selected = rows.find(
+    ({ customer, visit }) => `${customer.id}:${visit.id}` === moving,
+  );
   const start = new Date(
     anchor.getFullYear(),
     anchor.getMonth(),
     mode === "Month" ? 1 : anchor.getDate(),
   );
   start.setDate(start.getDate() - start.getDay());
-  const days = Array.from({ length: mode === "Month" ? 42 : 7 }, (_, index) => {
-    const day = new Date(start);
-    day.setDate(day.getDate() + index);
-    return day;
+  const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+  const count =
+    mode === "Month"
+      ? Math.ceil(
+          (new Date(anchor.getFullYear(), anchor.getMonth(), 1).getDay() +
+            last.getDate()) /
+            7,
+        ) * 7
+      : 7;
+  const days = Array.from({ length: count }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(date.getDate() + index);
+    return date;
   });
-  const slots = [
-    ...new Set([...TIMES, ...rows.map(({ visit }) => visit.time)]),
-  ].filter(Boolean);
-  const selected = rows.find(
-    ({ customer, visit }) => `${customer.id}:${visit.id}` === moving,
-  );
+  const dayCuts = rows
+    .filter(({ visit }) => visit.date === day)
+    .sort((a, b) => TIMES.indexOf(a.visit.time) - TIMES.indexOf(b.visit.time));
   function navigate(direction) {
-    const next = new Date(anchor);
+    const date = new Date(anchor);
     if (mode === "Month") {
-      next.setDate(1);
-      next.setMonth(next.getMonth() + direction);
-    } else next.setDate(next.getDate() + direction * 7);
-    setAnchor(next);
+      date.setDate(1);
+      date.setMonth(date.getMonth() + direction);
+    } else date.setDate(date.getDate() + direction * 7);
+    setAnchor(date);
+    setDay(formatDate(date));
   }
-  function moveTo(date, time, key = moving) {
-    if (!writable || !key) return;
+  function selectCut(row) {
+    setMoving(`${row.customer.id}:${row.visit.id}`);
+    setDay(row.visit.date);
+    setArrival(row.visit.time || TIMES[0]);
+    setAdding(false);
+    setFeedback("");
+  }
+  function move(date, time, key = moving) {
     const row = rows.find(
       ({ customer, visit }) => `${customer.id}:${visit.id}` === key,
     );
-    if (!row) return;
+    if (!writable || !row) return;
     try {
-      onMove(row.customer, row.visit, {
-        date: formatDate(date),
-        time: time || row.visit.time,
-      });
+      onMove(row.customer, row.visit, { date, time });
+      setDay(date);
       setMoving(null);
       setError("");
+      setFeedback(`${row.customer.name} moved to ${date}, ${time}.`);
     } catch (err) {
       setError(err.message);
     }
   }
-  function cutCard({ customer, visit }) {
-    const key = `${customer.id}:${visit.id}`;
-    return (
-      <div
-        key={key}
-        className={`calendar-cut ${moving === key ? "is-moving" : ""}`}
-      >
-        <button
-          type="button"
-          draggable={writable}
-          disabled={!writable}
-          aria-pressed={moving === key}
-          aria-label={`Move ${customer.name}, ${visit.date}, ${visit.time}`}
-          onClick={() => setMoving(moving === key ? null : key)}
-          onDragStart={(event) => {
-            event.dataTransfer.setData("text/plain", key);
-            event.dataTransfer.effectAllowed = "move";
-            setMoving(key);
-          }}
-        >
-          <strong>{customer.name}</strong>
-          <span>{visit.time}</span>
-          <small>{customer.address}</small>
-        </button>
-        <button
-          type="button"
-          className="calendar-edit"
-          disabled={!writable}
-          onClick={() => onEdit(customer, visit)}
-          aria-label={`Edit cut for ${customer.name}`}
-        >
-          Edit
-        </button>
-      </div>
-    );
+  function chooseDay(date) {
+    setDay(date);
+    if (selected) move(date, arrival);
+    else {
+      setAdding(true);
+      setFeedback("");
+    }
   }
-  function cell(day, time) {
-    const date = formatDate(day);
-    const cuts = rows.filter(
-      ({ visit }) => visit.date === date && (!time || visit.time === time),
-    );
-    return (
-      <div
-        key={`${date}-${time || "day"}`}
-        className={`calendar-cell ${formatDate(new Date()) === date ? "is-today" : ""} ${moving ? "can-drop" : ""}`}
-        onDragOver={(event) => {
-          if (writable && moving) event.preventDefault();
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          moveTo(day, time, event.dataTransfer.getData("text/plain"));
-        }}
-      >
-        {mode === "Month" && (
-          <span
-            className={`calendar-date ${day.getMonth() !== anchor.getMonth() ? "muted" : ""}`}
-          >
-            {day.getDate()}
-          </span>
-        )}
-        {cuts.map(cutCard)}
-        <button
-          type="button"
-          className="calendar-destination"
-          disabled={!writable || !moving}
-          aria-label={`Move selected cut to ${date}${time ? `, ${time}` : ""}`}
-          onClick={() => moveTo(day, time)}
-        >
-          {moving ? "Move here" : "—"}
-        </button>
-      </div>
-    );
+  function add(customer) {
+    try {
+      onAdd(customer, {
+        date: day,
+        time: arrival,
+        service: customer.service || "Weekly Mow",
+      });
+      setAdding(false);
+      setSearch("");
+      setError("");
+      setFeedback(`${customer.name} scheduled for ${day}, ${arrival}.`);
+    } catch (err) {
+      setError(err.message);
+    }
   }
   return (
     <section className="panel calendar-panel" aria-label="Cut calendar">
       <div className="calendar-toolbar">
         <div>
-          <span className="eyebrow">YOUR CUT CALENDAR</span>
           <h2>
-            {mode === "Month"
-              ? anchor.toLocaleDateString("en-US", {
-                  month: "long",
-                  year: "numeric",
-                })
-              : `${days[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${days[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+            {anchor.toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            })}
           </h2>
         </div>
         <div className="calendar-controls">
@@ -1400,7 +1375,14 @@ function ScheduleCalendar({ rows, writable, onMove, onEdit }) {
           >
             ←
           </Button>
-          <Button variant="secondary" onClick={() => setAnchor(new Date())}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const now = new Date();
+              setAnchor(now);
+              setDay(formatDate(now));
+            }}
+          >
             Today
           </Button>
           <Button
@@ -1411,7 +1393,7 @@ function ScheduleCalendar({ rows, writable, onMove, onEdit }) {
             →
           </Button>
           <div className="segmented">
-            {["Week", "Month"].map((item) => (
+            {["Month", "Week"].map((item) => (
               <button
                 key={item}
                 aria-pressed={mode === item}
@@ -1426,41 +1408,241 @@ function ScheduleCalendar({ rows, writable, onMove, onEdit }) {
       <div className="calendar-help" role="status">
         {selected ? (
           <>
-            <strong>Moving {selected.customer.name}</strong> · Choose a day or
-            time slot.{" "}
+            Moving <strong>{selected.customer.name}</strong> · Tap a new day or
+            choose a time below.{" "}
             <button className="text-button" onClick={() => setMoving(null)}>
               Cancel move
             </button>
           </>
         ) : (
-          "Drag a cut to another slot, or tap a cut and then tap Move here. Use Edit for any date or time."
+          feedback ||
+          "Tap a day, then a customer to schedule. Drag a cut to move it."
         )}
       </div>
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
-      <div className="calendar-scroll">
-        <div className={`calendar-grid calendar-${mode.toLowerCase()}`}>
-          {mode === "Week" && (
-            <div className="calendar-day-heading">Arrival window</div>
-          )}
-          {days.slice(0, 7).map((day) => (
-            <div key={day.toISOString()} className="calendar-day-heading">
-              {day.toLocaleDateString("en-US", { weekday: "short" })}
-              {mode === "Week" && <strong>{day.getDate()}</strong>}
-            </div>
-          ))}
-          {mode === "Month"
-            ? days.map((day) => cell(day))
-            : slots.map((time) => (
-                <div className="calendar-time-row" key={time}>
-                  <div className="calendar-time-label">{time}</div>
-                  {days.map((day) => cell(day, time))}
+      <div className="planner-layout">
+        <div className="calendar-scroll">
+          <div
+            className={`calendar-grid calendar-${mode.toLowerCase()}`}
+            style={{ "--calendar-weeks": count / 7 }}
+          >
+            {days.slice(0, 7).map((date) => (
+              <div key={date.toISOString()} className="calendar-day-heading">
+                {date.toLocaleDateString("en-US", { weekday: "short" })}
+              </div>
+            ))}
+            {days.map((date) => {
+              const label = formatDate(date);
+              const cuts = rows.filter(({ visit }) => visit.date === label);
+              return (
+                <div
+                  key={label}
+                  className={`calendar-cell ${day === label ? "is-selected" : ""} ${label === formatDate(new Date()) ? "is-today" : ""} ${date.getMonth() !== anchor.getMonth() ? "other-month" : ""}`}
+                  onDragOver={(event) => {
+                    if (writable && moving) {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const key = event.dataTransfer.getData("text/plain");
+                    const row = rows.find(
+                      ({ customer, visit }) =>
+                        `${customer.id}:${visit.id}` === key,
+                    );
+                    if (row) move(label, row.visit.time, key);
+                  }}
+                >
+                  <button
+                    className="calendar-date-button"
+                    aria-label={
+                      selected
+                        ? `Move selected cut to ${label}`
+                        : `Schedule on ${label}`
+                    }
+                    aria-pressed={day === label}
+                    disabled={!writable}
+                    onClick={() => chooseDay(label)}
+                  >
+                    <span>{date.getDate()}</span>
+                    <span className="calendar-count">
+                      {cuts.length
+                        ? `${cuts.length} cut${cuts.length === 1 ? "" : "s"}`
+                        : "+"}
+                    </span>
+                  </button>
+                  <div className="calendar-events">
+                    {cuts.slice(0, mode === "Month" ? 2 : 5).map((row) => (
+                      <button
+                        key={`${row.customer.id}:${row.visit.id}`}
+                        className={`calendar-event ${moving === `${row.customer.id}:${row.visit.id}` ? "is-moving" : ""}`}
+                        draggable={writable}
+                        disabled={!writable}
+                        aria-label={`Move ${row.customer.name}, ${row.visit.date}, ${row.visit.time}`}
+                        onClick={() => selectCut(row)}
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData(
+                            "text/plain",
+                            `${row.customer.id}:${row.visit.id}`,
+                          );
+                          event.dataTransfer.effectAllowed = "move";
+                          selectCut(row);
+                        }}
+                        onDragEnd={() => setMoving(null)}
+                      >
+                        <strong>{row.customer.name}</strong>
+                        <span>{row.visit.time}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {cuts.length > (mode === "Month" ? 2 : 5) && (
+                    <button
+                      className="calendar-more"
+                      onClick={() => {
+                        setDay(label);
+                        setAdding(false);
+                      }}
+                      aria-label={`See all ${cuts.length} cuts on ${label}`}
+                    >
+                      +{cuts.length - (mode === "Month" ? 2 : 5)} more
+                    </button>
+                  )}
                 </div>
-              ))}
+              );
+            })}
+          </div>
         </div>
+        <aside className="planner-day" aria-label="Selected day">
+          <div className="planner-day-heading">
+            <div>
+              <span className="eyebrow">
+                {dateObject(day).toLocaleDateString("en-US", {
+                  weekday: "long",
+                })}
+              </span>
+              <h3>{day}</h3>
+            </div>
+            <span className="pill green">{dayCuts.length} cuts</span>
+          </div>
+          <label className="field">
+            <span>
+              {selected ? "Move to arrival window" : "Arrival window"}
+            </span>
+            <select
+              value={arrival}
+              disabled={!writable}
+              onChange={(event) => {
+                setArrival(event.target.value);
+                if (selected) move(day, event.target.value);
+              }}
+            >
+              {[...new Set([...TIMES, arrival])].map((time) => (
+                <option key={time}>{time}</option>
+              ))}
+            </select>
+          </label>
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          {selected ? (
+            <p className="planner-hint">
+              Choose another day on the calendar to move this cut. Changing its
+              arrival window saves immediately.
+            </p>
+          ) : (
+            <Button
+              icon="plus"
+              disabled={!writable || !customers.length}
+              onClick={() => setAdding(!adding)}
+            >
+              {adding ? "Close customer picker" : "Add a cut"}
+            </Button>
+          )}
+          {adding && !selected && (
+            <div className="planner-customer-picker">
+              <div className="search-field">
+                <input
+                  aria-label="Find customer to schedule"
+                  placeholder="Find a customer…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+              <div className="planner-customer-list">
+                {customers
+                  .filter((customer) =>
+                    `${customer.name} ${customer.address}`
+                      .toLowerCase()
+                      .includes(search.toLowerCase()),
+                  )
+                  .map((customer) => {
+                    const already = rows.some(
+                      (row) =>
+                        row.customer.id === customer.id &&
+                        row.visit.date === day,
+                    );
+                    return (
+                      <button
+                        key={customer.id}
+                        className="planner-customer"
+                        aria-label={`Schedule ${customer.name} on ${day}`}
+                        disabled={!writable || already}
+                        onClick={() => add(customer)}
+                      >
+                        <strong>{customer.name}</strong>
+                        <small>
+                          {already
+                            ? "Already scheduled this day"
+                            : customer.address}
+                        </small>
+                        <span>{already ? "✓" : "+"}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+          <div className="planner-day-cuts">
+            {dayCuts.map(({ customer, visit }) => (
+              <div key={`${customer.id}:${visit.id}`} className="planner-cut">
+                <strong>{customer.name}</strong>
+                <span>{visit.time}</span>
+                <small>{customer.address}</small>
+                <div>
+                  <button
+                    className="text-button"
+                    disabled={!writable}
+                    onClick={() => selectCut({ customer, visit })}
+                  >
+                    Move
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={!writable}
+                    onClick={() => onEdit(customer, visit)}
+                    aria-label={`Edit cut for ${customer.name}`}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={!writable}
+                    onClick={() => onComplete(customer, visit)}
+                  >
+                    Complete
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!dayCuts.length && !adding && (
+              <p className="planner-hint">
+                No cuts yet. Add a customer to this day.
+              </p>
+            )}
+          </div>
+        </aside>
       </div>
     </section>
   );
@@ -1830,6 +2012,11 @@ function Owner({ customers, update, create, remove, writable }) {
           <div className="schedule-center">
             <ScheduleCalendar
               rows={scheduled}
+              customers={customers}
+              onComplete={complete}
+              onAdd={(customer, draft) =>
+                update(customer.id, (current) => appendVisits(current, draft))
+              }
               writable={writable}
               onEdit={(customer, visit) => open("visit", customer, { visit })}
               onMove={(customer, visit, changes) => {
