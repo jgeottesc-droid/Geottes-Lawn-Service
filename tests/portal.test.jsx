@@ -282,7 +282,10 @@ test("owner login and full payment workflow are functional", async () => {
   await user.click(screen.getByRole("button", { name: "Open my portal" }));
   assert.ok(screen.getByRole("heading", { name: "Let’s get growing." }));
   await user.click(
-    screen.getAllByRole("button", { name: "Record payment" })[0],
+    screen.getByRole("button", { name: /Demo Customer\s*\$80.00/ }),
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Record partial payment" }),
   );
   await user.clear(screen.getByLabelText("Amount received ($)"));
   await user.type(screen.getByLabelText("Amount received ($)"), "30");
@@ -293,6 +296,9 @@ test("owner login and full payment workflow are functional", async () => {
   );
   await waitFor(() => assert.equal(cloud.data[0].balance, 50));
   assert.equal(cloud.data[0].code, "DEMO10");
+  await user.click(
+    screen.getByRole("button", { name: "Overview", exact: true }),
+  );
   await user.click(screen.getAllByRole("button", { name: "Complete cut" })[0]);
   await waitFor(() => assert.equal(cloud.data[0].history.length, 1));
   assert.equal(cloud.data[0].balance, 50);
@@ -343,4 +349,53 @@ test("failed loading never writes local or empty records to the cloud", async ()
     0,
   );
   cleanup();
+});
+
+test("balance quick actions clear payment, add from zero, increase unpaid balance and set total", async () => {
+  const cloud = mockCloud();
+  render(<App />);
+  const user = await login(ADMIN_CODE);
+  await user.click(
+    screen.getByRole("button", { name: /Demo Customer\s*\$80.00/ }),
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Mark paid", exact: true }),
+  );
+  await waitFor(() => assert.equal(cloud.data[0].balance, 0));
+  assert.equal(cloud.data[0].paid, true);
+  assert.equal(cloud.data[0].paymentStatus, "Paid");
+  assert.match(cloud.data[0].paymentNote, /Received \$80.00/);
+  assert.ok(cloud.data[0].paidDate);
+  assert.equal(
+    screen.queryByRole("button", { name: "Mark paid", exact: true }),
+    null,
+  );
+  const paymentNote = cloud.data[0].paymentNote;
+  for (const [amount, expected] of [
+    ["35.25", 35.25],
+    ["20.10", 55.35],
+  ]) {
+    await user.click(
+      screen.getByRole("button", { name: "Manage balance", exact: true }),
+    );
+    await user.type(screen.getByLabelText("Amount to add ($)"), amount);
+    await user.click(screen.getByRole("button", { name: "Save balance" }));
+    await waitFor(() => assert.equal(cloud.data[0].balance, expected));
+    assert.equal(cloud.data[0].paymentStatus, "Unpaid");
+    assert.equal(cloud.data[0].paid, false);
+  }
+  await user.click(
+    screen.getByRole("button", { name: "Manage balance", exact: true }),
+  );
+  await user.selectOptions(
+    screen.getByLabelText("Balance action"),
+    "Set total",
+  );
+  await user.clear(screen.getByLabelText("New balance ($)"));
+  await user.type(screen.getByLabelText("New balance ($)"), "42.50");
+  await user.click(screen.getByRole("button", { name: "Save balance" }));
+  await waitFor(() => assert.equal(cloud.data[0].balance, 42.5));
+  assert.equal(cloud.data[0].paymentNote, paymentNote);
+  assert.equal(cloud.data[0].code, "DEMO10");
+  assert.deepEqual(cloud.data[0].visits, sample().visits);
 });
