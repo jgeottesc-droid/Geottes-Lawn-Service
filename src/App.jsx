@@ -797,26 +797,32 @@ function CustomerForm({ customer, customers, onSave, onClose }) {
   );
 }
 function PaymentForm({ customer, onSave, onClose, adjust = false }) {
-  const [amount, setAmount] = useState(String(customer.balance));
+  const [mode, setMode] = useState("Add charge");
+  const [amount, setAmount] = useState(adjust ? "" : String(customer.balance));
   const [note, setNote] = useState(adjust ? customer.paymentNote : "");
-  const [status, setStatus] = useState(customer.paymentStatus);
   const [error, setError] = useState("");
   function submit(event) {
     event.preventDefault();
     try {
       if (adjust) {
-        const balance = Math.round(Number(amount) * 100) / 100;
-        if (!Number.isFinite(balance) || balance < 0)
+        const value = Number(amount);
+        const balance =
+          Math.round(
+            (value + (mode === "Add charge" ? Number(customer.balance) : 0)) *
+              100,
+          ) / 100;
+        if (
+          !amount.trim() ||
+          !Number.isFinite(balance) ||
+          value < 0 ||
+          (mode === "Add charge" && value === 0)
+        )
           throw new Error("Enter a valid balance.");
-        if (balance > 0 && status === "Paid")
-          throw new Error(
-            "To mark this paid, record the payment or set the balance to zero.",
-          );
         onSave({
           ...customer,
           balance,
           paid: balance === 0,
-          paymentStatus: balance === 0 ? "Paid" : status,
+          paymentStatus: balance === 0 ? "Paid" : "Unpaid",
           paymentNote: note,
         });
       } else onSave(recordPayment(customer, amount, note));
@@ -835,31 +841,59 @@ function PaymentForm({ customer, onSave, onClose, adjust = false }) {
           <span>Current balance</span>
           <strong>{money(customer.balance)}</strong>
         </div>
+        {adjust && (
+          <Field
+            label="Balance action"
+            options={["Add charge", "Set total"]}
+            value={mode}
+            onChange={(event) => {
+              setMode(event.target.value);
+              setAmount(
+                event.target.value === "Set total"
+                  ? String(customer.balance)
+                  : "",
+              );
+              setError("");
+            }}
+          />
+        )}
         <Field
-          label={adjust ? "Balance ($)" : "Amount received ($)"}
+          label={
+            adjust
+              ? mode === "Add charge"
+                ? "Amount to add ($)"
+                : "New balance ($)"
+              : "Amount received ($)"
+          }
           autoFocus
           type="number"
-          min={adjust ? "0" : "0.01"}
+          min={adjust && mode === "Set total" ? "0" : "0.01"}
           step="0.01"
           max={adjust ? undefined : customer.balance}
           required
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
         />
-        {adjust && (
-          <Field
-            label="Payment status"
-            options={["Unpaid", "Pending", "Paid"]}
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          />
-        )}
         <Field
           label={adjust ? "Payment notes" : "Note (optional)"}
           area
           value={note}
           onChange={(event) => setNote(event.target.value)}
         />
+        {adjust && (
+          <p className="muted">
+            New balance:{" "}
+            <strong>
+              {money(
+                Math.max(
+                  0,
+                  (mode === "Add charge" ? Number(customer.balance) : 0) +
+                    (Number(amount) || 0),
+                ),
+              )}
+            </strong>
+          </p>
+        )}
         {!adjust && (
           <p className="muted">
             Remaining after payment:{" "}
@@ -1728,6 +1762,17 @@ function Owner({ customers, update, create, remove, writable }) {
     setModal(null);
     setNotice("Change added. Check the save status above.");
   }
+  function markPaid(customer) {
+    if (!writable) return;
+    update(customer.id, (current) =>
+      Number(current.balance) > 0
+        ? recordPayment(current, current.balance)
+        : current,
+    );
+    setNotice(
+      `Payment recorded for ${firstName(customer.name)}. Check the save status above.`,
+    );
+  }
   function complete(customer, visit) {
     update(customer.id, (current) =>
       changeVisit(current, visit.id, { status: "Completed" }),
@@ -1975,9 +2020,9 @@ function Owner({ customers, update, create, remove, writable }) {
                         <Button
                           variant="secondary"
                           disabled={!writable}
-                          onClick={() => open("payment", customer)}
+                          onClick={() => markPaid(customer)}
                         >
-                          Record payment
+                          Mark paid
                         </Button>
                       </div>
                     ))
@@ -2221,13 +2266,34 @@ function Owner({ customers, update, create, remove, writable }) {
                     </div>
                   </div>
                   <div className="quick-actions">
+                    {Number(selected.balance) > 0 && (
+                      <Button
+                        icon="check"
+                        disabled={!writable}
+                        onClick={() => markPaid(selected)}
+                      >
+                        Mark paid
+                      </Button>
+                    )}
                     <Button
                       icon="wallet"
-                      disabled={!writable || Number(selected.balance) <= 0}
-                      onClick={() => open("payment", selected)}
+                      variant={
+                        Number(selected.balance) > 0 ? "secondary" : "primary"
+                      }
+                      disabled={!writable}
+                      onClick={() => open("adjust", selected)}
                     >
-                      Record payment
+                      Manage balance
                     </Button>
+                    {Number(selected.balance) > 0 && (
+                      <Button
+                        variant="secondary"
+                        disabled={!writable}
+                        onClick={() => open("payment", selected)}
+                      >
+                        Record partial payment
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       icon="plus"
