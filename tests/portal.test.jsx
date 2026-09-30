@@ -280,7 +280,7 @@ test("owner login and full payment workflow are functional", async () => {
   );
   await user.type(screen.getByLabelText("Portal code"), ADMIN_CODE);
   await user.click(screen.getByRole("button", { name: "Open my portal" }));
-  assert.ok(screen.getByRole("heading", { name: "Let’s get growing." }));
+  assert.ok(screen.getByRole("heading", { name: "Your day, under control." }));
   await user.click(
     screen.getByRole("button", { name: /Demo Customer\s*\$80.00/ }),
   );
@@ -398,4 +398,35 @@ test("balance quick actions clear payment, add from zero, increase unpaid balanc
   assert.equal(cloud.data[0].paymentNote, paymentNote);
   assert.equal(cloud.data[0].code, "DEMO10");
   assert.deepEqual(cloud.data[0].visits, sample().visits);
+});
+
+test("payment desk filters balances, records partial payments and keeps access and scheduling intact", async () => {
+  const cloud = mockCloud();
+  render(<App />);
+  const user = await login(ADMIN_CODE);
+  await user.click(
+    screen.getByRole("button", { name: "Payments", exact: true }),
+  );
+  assert.ok(screen.getByText("Last payment: Not recorded"));
+  await user.click(screen.getByRole("button", { name: "Partial payment" }));
+  await user.clear(screen.getByLabelText("Amount received ($)"));
+  await user.type(screen.getByLabelText("Amount received ($)"), "25");
+  await user.click(
+    screen.getByRole("button", { name: "Record payment", exact: true }),
+  );
+  await waitFor(() => assert.equal(cloud.data[0].balance, 55));
+  assert.equal(cloud.data[0].code, "DEMO10");
+  assert.deepEqual(cloud.data[0].visits, sample().visits);
+  await user.click(
+    screen.getByRole("button", { name: "Mark paid", exact: true }),
+  );
+  await waitFor(() => assert.equal(cloud.data[0].balance, 0));
+  assert.ok(screen.getByText("Nothing to collect here"));
+  await user.selectOptions(screen.getByLabelText("Show payments"), "Caught up");
+  assert.ok(screen.getByRole("button", { name: "Demo Customer" }));
+  await user.click(screen.getByRole("button", { name: "Manage balance" }));
+  await user.type(screen.getByLabelText("Amount to add ($)"), "40");
+  await user.click(screen.getByRole("button", { name: "Save balance" }));
+  await waitFor(() => assert.equal(cloud.data[0].balance, 40));
+  assert.equal(cloud.data[0].code, "DEMO10");
 });
