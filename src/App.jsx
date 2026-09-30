@@ -276,17 +276,21 @@ function Login({ customers, ready, error: connectionError, onLogin, onRetry }) {
       <div className="login-story">
         <Brand inverse />
         <div className="lawn-sculpture" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <span />
+          <div className="lawn-tile tile-back" />
+          <div className="lawn-tile tile-front">
+            <span className="lawn-path" />
+            <span className="lawn-tree" />
+          </div>
+          <span className="landscape-label">
+            A little care. A greener everyday.
+          </span>
         </div>
         <div className="login-title">
           <span className="overline">YOUR LAWN, TAKEN CARE OF.</span>
           <h1>
-            A little less
+            Good lawns.
             <br />
-            on your <em>list.</em>
+            Great <em>peace of mind.</em>
           </h1>
           <p>
             Your next cut, payments, and a direct line to Jesse. All in one
@@ -312,9 +316,9 @@ function Login({ customers, ready, error: connectionError, onLogin, onRetry }) {
         <div className="login-form">
           <span className="eyebrow">WELCOME BACK</span>
           <h2>
-            Your lawn.
+            Everything
             <br />
-            Your portal.
+            looks greener.
           </h2>
           <p>Enter the private code Jesse gave you.</p>
           <form onSubmit={submit}>
@@ -1913,14 +1917,14 @@ function Owner({ customers, update, create, remove, writable }) {
                 .toUpperCase()}
             </span>
             <h1>
-              {view === "Overview" ? "Let’s get growing." : view}
+              {view === "Overview" ? "Your day, under control." : view}
               <span className="title-dot">
                 {view === "Overview" ? "" : "."}
               </span>
             </h1>
             <p>
               {view === "Overview"
-                ? "A clear view of your day. A few clicks to keep it moving."
+                ? "The lawns, the money, the next move. All right here."
                 : view === "Customers"
                   ? "Everything for each customer, together."
                   : view === "Payments"
@@ -1965,6 +1969,31 @@ function Owner({ customers, update, create, remove, writable }) {
         )}
         {view === "Overview" && (
           <>
+            <section className="day-command">
+              <div>
+                <span className="eyebrow">THE NEXT MOVE</span>
+                <h2>
+                  {todayCuts.length
+                    ? `${todayCuts.length} lawns on today’s route.`
+                    : weekCuts.length
+                      ? `${weekCuts.length} cuts in the next seven days.`
+                      : "Make room for a greener week."}
+                </h2>
+                <p>
+                  {overdueCuts.length
+                    ? `${overdueCuts.length} older cuts still need a review. Keep your calendar current.`
+                    : "Choose a date, add a lawn, and you’re ready to go."}
+                </p>
+              </div>
+              <Button icon="calendar" onClick={() => setView("Schedule")}>
+                Open planner
+              </Button>
+              <div className="command-art" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            </section>
             <div className="stats">
               <button
                 className="stat stat-feature"
