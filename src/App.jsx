@@ -23,10 +23,15 @@ import {
   money,
   isoDate,
   fromISO,
-  recordPayment,
   changeVisit,
   appendVisits,
 } from "./data";
+
+import {
+  recordTrackedPayment as recordPayment,
+  lastPayment,
+  localDay,
+} from "./payments";
 
 function Icon({ name, size = 20 }) {
   const paths = {
@@ -275,12 +280,22 @@ function Login({ customers, ready, error: connectionError, onLogin, onRetry }) {
     <main className="login">
       <div className="login-story">
         <Brand inverse />
+        <div className="lawn-sculpture" aria-hidden="true">
+          <div className="lawn-tile tile-back" />
+          <div className="lawn-tile tile-front">
+            <span className="lawn-path" />
+            <span className="lawn-tree" />
+          </div>
+          <span className="landscape-label">
+            A little care. A greener everyday.
+          </span>
+        </div>
         <div className="login-title">
           <span className="overline">YOUR LAWN, TAKEN CARE OF.</span>
           <h1>
-            A little less
+            Good lawns.
             <br />
-            on your <em>list.</em>
+            Great <em>peace of mind.</em>
           </h1>
           <p>
             Your next cut, payments, and a direct line to Jesse. All in one
@@ -305,11 +320,7 @@ function Login({ customers, ready, error: connectionError, onLogin, onRetry }) {
       <div className="login-entry">
         <div className="login-form">
           <span className="eyebrow">WELCOME BACK</span>
-          <h2>
-            Your lawn.
-            <br />
-            Your portal.
-          </h2>
+          <h2>A greener everyday.</h2>
           <p>Enter the private code Jesse gave you.</p>
           <form onSubmit={submit}>
             <label className="field">
@@ -370,7 +381,7 @@ function Login({ customers, ready, error: connectionError, onLogin, onRetry }) {
     </main>
   );
 }
-function PaymentCard({ customer }) {
+function PaymentCard({ customer, onPay, writable }) {
   const due = Number(customer.balance) || 0;
   return (
     <section className="panel payment-card">
@@ -388,9 +399,17 @@ function PaymentCard({ customer }) {
           href={venmoLink(customer)}
           target="_blank"
           rel="noreferrer"
+          aria-disabled={!writable || undefined}
+          onClick={onPay}
         >
           Pay with Venmo <Icon name="arrow" />
         </a>
+      )}
+      {due > 0 && (
+        <p className="payment-explainer">
+          This button marks your balance paid. Finish sending your payment in
+          Venmo.
+        </p>
       )}
       <small>
         {VENMO}
@@ -445,6 +464,23 @@ function CustomerPortal({ customer, update, writable }) {
   const weather =
     customer.weatherNotice ||
     visits.find((visit) => visit.weather && visit.weather !== "Clear")?.weather;
+  function pay(event) {
+    if (!writable) {
+      event.preventDefault();
+      return;
+    }
+    update(customer.id, (current) => {
+      const balance = Number(current.balance) || 0;
+      return balance > 0
+        ? recordPayment(
+            current,
+            balance,
+            "Automatically marked paid when the Venmo link was opened. Receipt not verified.",
+            { source: "Venmo link click" },
+          )
+        : current;
+    });
+  }
   function send(event) {
     event.preventDefault();
     if (!writable || (mode === "Comment" && !message.trim())) return;
@@ -500,7 +536,7 @@ function CustomerPortal({ customer, update, writable }) {
         <>
           <div className="portal-summary">
             <NextCut customer={customer} />
-            <PaymentCard customer={customer} />
+            <PaymentCard customer={customer} onPay={pay} writable={writable} />
           </div>
           {weather && (
             <div className="weather-notice">
@@ -800,6 +836,7 @@ function PaymentForm({ customer, onSave, onClose, adjust = false }) {
   const [mode, setMode] = useState("Add charge");
   const [amount, setAmount] = useState(adjust ? "" : String(customer.balance));
   const [note, setNote] = useState(adjust ? customer.paymentNote : "");
+  const [paymentDate, setPaymentDate] = useState(localDay());
   const [error, setError] = useState("");
   function submit(event) {
     event.preventDefault();
@@ -825,7 +862,8 @@ function PaymentForm({ customer, onSave, onClose, adjust = false }) {
           paymentStatus: balance === 0 ? "Paid" : "Unpaid",
           paymentNote: note,
         });
-      } else onSave(recordPayment(customer, amount, note));
+      } else
+        onSave(recordPayment(customer, amount, note, { date: paymentDate }));
     } catch (err) {
       setError(err.message);
     }
@@ -874,6 +912,16 @@ function PaymentForm({ customer, onSave, onClose, adjust = false }) {
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
         />
+        {!adjust && (
+          <Field
+            label="Payment date"
+            type="date"
+            required
+            max={localDay()}
+            value={paymentDate}
+            onChange={(event) => setPaymentDate(event.target.value)}
+          />
+        )}
         <Field
           label={adjust ? "Payment notes" : "Note (optional)"}
           area
@@ -1426,6 +1474,28 @@ function ScheduleCalendar({
           >
             →
           </Button>
+          <Button
+            variant="secondary"
+            disabled={!rows.length}
+            onClick={() => {
+              const today = dateObject(formatDate(new Date()));
+              const chronological = [...rows].sort(
+                (a, b) => dateObject(a.visit.date) - dateObject(b.visit.date),
+              );
+              const next =
+                chronological.find(
+                  ({ visit }) => dateObject(visit.date) >= today,
+                ) || chronological[0];
+              setAnchor(dateObject(next.visit.date));
+              setDay(next.visit.date);
+              setMoving(null);
+              setFeedback(
+                "Next cut selected. Review the day’s schedule below.",
+              );
+            }}
+          >
+            Next cut
+          </Button>
           <div className="segmented">
             {["Month", "Week"].map((item) => (
               <button
@@ -1690,8 +1760,10 @@ function Owner({ customers, update, create, remove, writable }) {
   const [detailTab, setDetailTab] = useState("Schedule");
   const [modal, setModal] = useState(null);
   const [notice, setNotice] = useState("");
-  const [scheduleFilter, setScheduleFilter] = useState("All upcoming");
+  const [scheduleFilter, setScheduleFilter] = useState("All scheduled");
   const [historySearch, setHistorySearch] = useState("");
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("Balance due");
   const selected = customers.find((item) => item.id === selectedId);
   const modalCustomer = customers.find((item) => item.id === modal?.customerId);
   const due = customers.filter((item) => Number(item.balance) > 0);
@@ -1724,7 +1796,16 @@ function Owner({ customers, update, create, remove, writable }) {
     const date = dateObject(visit.date);
     return date >= todayDate && date <= nextWeekDate;
   });
-  const unscheduled = customers.filter((customer) => !getNextVisit(customer));
+  const upcomingCuts = scheduled.filter(
+    ({ visit }) => dateObject(visit.date) >= todayDate,
+  );
+  const unscheduled = customers.filter(
+    (customer) =>
+      !getVisits(customer).some(
+        (visit) =>
+          visit.status !== "Completed" && dateObject(visit.date) >= todayDate,
+      ),
+  );
   const shownSchedule =
     scheduleFilter === "Next 7 days"
       ? weekCuts
@@ -1835,6 +1916,7 @@ function Owner({ customers, update, create, remove, writable }) {
           {[
             ["Overview", "grid"],
             ["Customers", "users"],
+            ["Payments", "wallet"],
             ["Schedule", "calendar"],
             ["History", "history"],
             ["Messages", "message"],
@@ -1876,21 +1958,23 @@ function Owner({ customers, update, create, remove, writable }) {
                 .toUpperCase()}
             </span>
             <h1>
-              {view === "Overview" ? "Let’s get growing." : view}
+              {view === "Overview" ? "Your day, under control." : view}
               <span className="title-dot">
                 {view === "Overview" ? "" : "."}
               </span>
             </h1>
             <p>
               {view === "Overview"
-                ? "A clear view of your day. A few clicks to keep it moving."
+                ? "The lawns, the money, the next move. All right here."
                 : view === "Customers"
                   ? "Everything for each customer, together."
-                  : view === "Schedule"
-                    ? "Every upcoming cut, in date order."
-                    : view === "History"
-                      ? "Every lawn you’ve completed, all in one place."
-                      : "Keep up with customer notes and requests."}
+                  : view === "Payments"
+                    ? "Balances, last payments, and quick actions in one place."
+                    : view === "Schedule"
+                      ? "Plan the next cut, move a visit, or review an older one."
+                      : view === "History"
+                        ? "Every lawn you’ve completed, all in one place."
+                        : "Keep up with customer notes and requests."}
             </p>
           </div>
           <div className="page-actions">
@@ -1926,65 +2010,99 @@ function Owner({ customers, update, create, remove, writable }) {
         )}
         {view === "Overview" && (
           <>
-            <div className="stats">
-              <button
-                className="stat stat-feature"
-                onClick={() => setView("Schedule")}
-              >
-                <span>
-                  <Icon name="calendar" />
-                  Cuts today
-                </span>
-                <strong>
-                  {todayCuts.length}
-                  <small>scheduled</small>
-                </strong>
+            <div className="daily-stage">
+              <section className="day-command">
                 <div>
-                  View your schedule <Icon name="arrow" />
+                  <span className="eyebrow">
+                    A LITTLE CARE. A GREENER WEEK.
+                  </span>
+                  <h2>
+                    {todayCuts.length
+                      ? `${todayCuts.length} lawns on today’s route.`
+                      : weekCuts.length
+                        ? `${weekCuts.length} cuts in the next seven days.`
+                        : "Make room for a greener week."}
+                  </h2>
+                  <p>
+                    {overdueCuts.length
+                      ? `${overdueCuts.length} older cuts still need a review. Keep your calendar current.`
+                      : "Choose a date, add a lawn, and you’re ready to go."}
+                  </p>
                 </div>
-              </button>
-              <button
-                className="stat"
-                onClick={() => {
-                  setFilter("Balance due");
-                  setSelectedId(null);
-                  setView("Customers");
-                }}
-              >
-                <span>
-                  <Icon name="wallet" />
-                  Outstanding balance
-                </span>
-                <strong>{money(totalDue)}</strong>
-                <div>
-                  {due.length} {due.length === 1 ? "customer" : "customers"}{" "}
-                  with a balance <Icon name="arrow" />
+                <Button icon="calendar" onClick={() => setView("Schedule")}>
+                  Open planner
+                </Button>
+                <div className="command-art" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
                 </div>
-              </button>
-              <button className="stat" onClick={() => setView("Messages")}>
-                <span>
-                  <Icon name="message" />
-                  Open requests
-                </span>
-                <strong>
-                  {openRequests.length}
-                  <small>to review</small>
-                </strong>
-                <div>
-                  Go to messages <Icon name="arrow" />
-                </div>
-              </button>
+              </section>
+              <div className="stats">
+                <button
+                  className="stat stat-feature"
+                  onClick={() => setView("Schedule")}
+                >
+                  <span>
+                    <Icon name="calendar" />
+                    Cuts today
+                  </span>
+                  <strong>
+                    {todayCuts.length}
+                    <small>scheduled</small>
+                  </strong>
+                  <div>
+                    View your schedule <Icon name="arrow" />
+                  </div>
+                </button>
+                <button
+                  className="stat"
+                  onClick={() => {
+                    setPaymentFilter("Balance due");
+                    setView("Payments");
+                  }}
+                >
+                  <span>
+                    <Icon name="wallet" />
+                    Outstanding balance
+                  </span>
+                  <strong>{money(totalDue)}</strong>
+                  <div>
+                    {due.length} {due.length === 1 ? "customer" : "customers"}{" "}
+                    with a balance <Icon name="arrow" />
+                  </div>
+                </button>
+                <button className="stat" onClick={() => setView("Messages")}>
+                  <span>
+                    <Icon name="message" />
+                    Open requests
+                  </span>
+                  <strong>
+                    {openRequests.length}
+                    <small>to review</small>
+                  </strong>
+                  <div>
+                    Go to messages <Icon name="arrow" />
+                  </div>
+                </button>
+              </div>
             </div>
             <div className="overview-columns">
               <section className="panel">
                 <SectionHead
                   title={
-                    todayCuts.length ? "Today’s cuts" : "Next on the schedule"
+                    todayCuts.length
+                      ? "Today’s cuts"
+                      : upcomingCuts.length
+                        ? "Next on the schedule"
+                        : "Older cuts to review"
                   }
                   detail={
                     todayCuts.length
                       ? "Finish a cut right from here."
-                      : "Your earliest scheduled work."
+                      : upcomingCuts.length
+                        ? "Your next upcoming work."
+                        : "Review these before scheduling your next round."
                   }
                 >
                   <button
@@ -1996,7 +2114,12 @@ function Owner({ customers, update, create, remove, writable }) {
                 </SectionHead>
                 {scheduled.length ? (
                   routeRows(
-                    (todayCuts.length ? todayCuts : scheduled).slice(0, 5),
+                    (todayCuts.length
+                      ? todayCuts
+                      : upcomingCuts.length
+                        ? upcomingCuts
+                        : overdueCuts
+                    ).slice(0, 5),
                   )
                 ) : (
                   <Empty title="Your schedule is clear">
@@ -2005,7 +2128,14 @@ function Owner({ customers, update, create, remove, writable }) {
                 )}
               </section>
               <section className="panel balances-panel">
-                <SectionHead title="Balances to collect" />
+                <SectionHead title="Balances to collect">
+                  <button
+                    className="text-button"
+                    onClick={() => setView("Payments")}
+                  >
+                    View all <Icon name="arrow" size={16} />
+                  </button>
+                </SectionHead>
                 <div>
                   {due.length ? (
                     due.slice(0, 5).map((customer) => (
@@ -2053,6 +2183,142 @@ function Owner({ customers, update, create, remove, writable }) {
             </section>
           </>
         )}
+        {view === "Payments" && (
+          <div className="payments-center">
+            <section className="collection-banner">
+              <div>
+                <span className="eyebrow">READY TO COLLECT</span>
+                <h2>{money(totalDue)}</h2>
+                <p>
+                  {due.length} customers with a balance ·{" "}
+                  {customers.length - due.length} caught up
+                </p>
+              </div>
+              <div className="collection-tip">
+                <Icon name="check" />
+                <p>
+                  Venmo button clicks automatically mark balances paid. Check
+                  Venmo to verify receipt.
+                </p>
+              </div>
+            </section>
+            <section className="panel">
+              <SectionHead
+                title="Your payment desk"
+                detail="Last payment stays visible. Full and partial payments are a click away."
+              />
+              <div className="payment-controls">
+                <label className="field">
+                  <span>Find a customer</span>
+                  <input
+                    type="search"
+                    placeholder="Search name or address"
+                    value={paymentSearch}
+                    onChange={(e) => setPaymentSearch(e.target.value)}
+                  />
+                </label>
+                <Field
+                  label="Show payments"
+                  options={["Balance due", "Caught up", "All customers"]}
+                  value={paymentFilter}
+                  onChange={(e) => setPaymentFilter(e.target.value)}
+                />
+              </div>
+              <div className="payment-list">
+                {customers
+                  .filter(
+                    (c) =>
+                      `${c.name} ${c.address}`
+                        .toLowerCase()
+                        .includes(paymentSearch.toLowerCase()) &&
+                      (paymentFilter === "All customers" ||
+                        (paymentFilter === "Balance due"
+                          ? Number(c.balance) > 0
+                          : Number(c.balance) <= 0)),
+                  )
+                  .sort(
+                    (a, b) =>
+                      Number(b.balance) - Number(a.balance) ||
+                      a.name.localeCompare(b.name),
+                  )
+                  .map((customer) => (
+                    <article className="payment-desk-row" key={customer.id}>
+                      <div className="payment-person">
+                        <button
+                          className="text-button"
+                          onClick={() => pick(customer)}
+                        >
+                          {customer.name}
+                          <Icon name="arrow" size={14} />
+                        </button>
+                        <p>{customer.address}</p>
+                        <small>
+                          Last payment: {lastPayment(customer).label}
+                        </small>
+                        {customer.paymentNote && (
+                          <details className="payment-history">
+                            <summary>Payment history</summary>
+                            <small className="preserve-lines">
+                              {customer.paymentNote}
+                            </small>
+                          </details>
+                        )}
+                      </div>
+                      <div className="payment-amount">
+                        <strong>{money(customer.balance)}</strong>
+                        <Pill>
+                          {Number(customer.balance) > 0
+                            ? "Balance due"
+                            : "Paid"}
+                        </Pill>
+                      </div>
+                      <div className="payment-row-actions">
+                        {Number(customer.balance) > 0 && (
+                          <>
+                            <Button
+                              disabled={!writable}
+                              icon="check"
+                              onClick={() => markPaid(customer)}
+                            >
+                              Mark paid
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              disabled={!writable}
+                              onClick={() => open("payment", customer)}
+                            >
+                              Partial payment
+                            </Button>
+                          </>
+                        )}
+                        <Button
+                          variant="secondary"
+                          disabled={!writable}
+                          onClick={() => open("adjust", customer)}
+                        >
+                          Manage balance
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                {!customers.some(
+                  (c) =>
+                    `${c.name} ${c.address}`
+                      .toLowerCase()
+                      .includes(paymentSearch.toLowerCase()) &&
+                    (paymentFilter === "All customers" ||
+                      (paymentFilter === "Balance due"
+                        ? Number(c.balance) > 0
+                        : Number(c.balance) <= 0)),
+                ) && (
+                  <Empty title="Nothing to collect here">
+                    Change the filter or search to see more customers.
+                  </Empty>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
         {view === "Schedule" && (
           <div className="schedule-center">
             <ScheduleCalendar
@@ -2087,7 +2353,7 @@ function Owner({ customers, update, create, remove, writable }) {
                 <strong>{overdueCuts.length}</strong>
                 <small>need attention</small>
               </button>
-              <button onClick={() => setScheduleFilter("All upcoming")}>
+              <button onClick={() => setScheduleFilter("All scheduled")}>
                 <span>Not scheduled</span>
                 <strong>{unscheduled.length}</strong>
                 <small>customers</small>
@@ -2096,7 +2362,13 @@ function Owner({ customers, update, create, remove, writable }) {
             <div className="schedule-columns">
               <section className="panel">
                 <SectionHead
-                  title="Upcoming cuts"
+                  title={
+                    scheduleFilter === "All scheduled"
+                      ? "Scheduled cuts"
+                      : scheduleFilter === "Overdue"
+                        ? "Older cuts to review"
+                        : "Upcoming cuts"
+                  }
                   detail={`${shownSchedule.length} shown · ${scheduled.length} total`}
                 >
                   <div className="schedule-filter">
@@ -2107,7 +2379,7 @@ function Owner({ customers, update, create, remove, writable }) {
                         setScheduleFilter(event.target.value)
                       }
                     >
-                      {["All upcoming", "Next 7 days", "Overdue"].map(
+                      {["All scheduled", "Next 7 days", "Overdue"].map(
                         (item) => (
                           <option key={item}>{item}</option>
                         ),

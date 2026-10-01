@@ -101,6 +101,9 @@ test("calendar moves a cut to a new day and time and preserves customer records"
   );
   const calendar = screen.getByRole("region", { name: "Cut calendar" });
   await user.click(
+    within(calendar).getByRole("button", { name: "Next cut", exact: true }),
+  );
+  await user.click(
     within(calendar).getByRole("button", {
       name: "Move Demo Customer, September 10, 2026, 8:00–10:00 AM",
     }),
@@ -149,6 +152,9 @@ test("calendar schedules a customer in two clicks on the chosen day", async () =
   );
   const calendar = screen.getByRole("region", { name: "Cut calendar" });
   await user.click(
+    within(calendar).getByRole("button", { name: "Next cut", exact: true }),
+  );
+  await user.click(
     within(calendar).getByRole("button", {
       name: "Schedule on September 18, 2026",
     }),
@@ -161,6 +167,40 @@ test("calendar schedules a customer in two clicks on the chosen day", async () =
   await waitFor(() => assert.equal(cloud.data[0].visits.length, 2));
   assert.equal(cloud.data[0].visits[1].date, "September 18, 2026");
   assert.equal(cloud.data[0].code, "DEMO10");
+});
+
+test("Venmo link click marks the balance paid, preserves the destination and customer records, and records its source", async () => {
+  const cloud = mockCloud();
+  const before = structuredClone(cloud.data[0]);
+  render(<App />);
+  const user = await login("DEMO10");
+  const link = screen.getByRole("link", { name: "Pay with Venmo" });
+  const original = new URL(link.href);
+  assert.equal(original.pathname, "/Jesse-Geottes");
+  assert.equal(original.searchParams.get("amount"), "80");
+  assert.equal(
+    original.searchParams.get("note"),
+    "Lawn service - 123 Test Lane",
+  );
+  assert.equal(link.target, "_blank");
+  // Prevent navigation only in this isolated test; the app retains the original Venmo destination.
+  link.addEventListener("click", (event) => event.preventDefault());
+  await user.click(link);
+  await waitFor(() => assert.equal(cloud.data[0].balance, 0));
+  const after = cloud.data[0];
+  assert.equal(after.paid, true);
+  assert.equal(after.paymentStatus, "Paid");
+  assert.ok(after.paidDate);
+  assert.equal(after.code, before.code);
+  assert.deepEqual(after.visits, before.visits);
+  assert.deepEqual(after.history, before.history);
+  assert.deepEqual(after.comments, before.comments);
+  assert.deepEqual(after.requests, before.requests);
+  assert.equal(after.paymentTransactions.length, 1);
+  assert.equal(after.paymentTransactions[0].amount, 80);
+  assert.equal(after.paymentTransactions[0].source, "Venmo link click");
+  assert.match(after.paymentNote, /Receipt not verified/);
+  assert.equal(screen.queryByRole("link", { name: "Pay with Venmo" }), null);
 });
 
 test("owner can schedule the next cut from the main dashboard", async () => {
@@ -280,7 +320,7 @@ test("owner login and full payment workflow are functional", async () => {
   );
   await user.type(screen.getByLabelText("Portal code"), ADMIN_CODE);
   await user.click(screen.getByRole("button", { name: "Open my portal" }));
-  assert.ok(screen.getByRole("heading", { name: "Let’s get growing." }));
+  assert.ok(screen.getByRole("heading", { name: "Your day, under control." }));
   await user.click(
     screen.getByRole("button", { name: /Demo Customer\s*\$80.00/ }),
   );
@@ -398,4 +438,35 @@ test("balance quick actions clear payment, add from zero, increase unpaid balanc
   assert.equal(cloud.data[0].paymentNote, paymentNote);
   assert.equal(cloud.data[0].code, "DEMO10");
   assert.deepEqual(cloud.data[0].visits, sample().visits);
+});
+
+test("payment desk filters balances, records partial payments and keeps access and scheduling intact", async () => {
+  const cloud = mockCloud();
+  render(<App />);
+  const user = await login(ADMIN_CODE);
+  await user.click(
+    screen.getByRole("button", { name: "Payments", exact: true }),
+  );
+  assert.ok(screen.getByText("Last payment: Not recorded"));
+  await user.click(screen.getByRole("button", { name: "Partial payment" }));
+  await user.clear(screen.getByLabelText("Amount received ($)"));
+  await user.type(screen.getByLabelText("Amount received ($)"), "25");
+  await user.click(
+    screen.getByRole("button", { name: "Record payment", exact: true }),
+  );
+  await waitFor(() => assert.equal(cloud.data[0].balance, 55));
+  assert.equal(cloud.data[0].code, "DEMO10");
+  assert.deepEqual(cloud.data[0].visits, sample().visits);
+  await user.click(
+    screen.getByRole("button", { name: "Mark paid", exact: true }),
+  );
+  await waitFor(() => assert.equal(cloud.data[0].balance, 0));
+  assert.ok(screen.getByText("Nothing to collect here"));
+  await user.selectOptions(screen.getByLabelText("Show payments"), "Caught up");
+  assert.ok(screen.getByRole("button", { name: "Demo Customer" }));
+  await user.click(screen.getByRole("button", { name: "Manage balance" }));
+  await user.type(screen.getByLabelText("Amount to add ($)"), "40");
+  await user.click(screen.getByRole("button", { name: "Save balance" }));
+  await waitFor(() => assert.equal(cloud.data[0].balance, 40));
+  assert.equal(cloud.data[0].code, "DEMO10");
 });
